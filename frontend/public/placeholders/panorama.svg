@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#051026"/>
+      <stop offset="1" stop-color="#0c1b3a"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#bg)"/>
+  <g fill="#18335e">
+    <rect x="0" y="300" width="800" height="150"/>
+    <rect x="-50" y="310" width="200" height="60" transform="skewX(-10)"/>
+    <rect x="250" y="320" width="260" height="50" transform="skewX(-8)"/>
+  </g>
+  <g stroke="#2f58a8" fill="none">
+    <rect x="200" y="200" width="200" height="120" rx="8" stroke-dasharray="6 6"/>
+    <rect x="480" y="210" width="140" height="90" rx="8" stroke-dasharray="6 6"/>
+  </g>
+  <text x="20" y="32" fill="#8fb3ff" font-family="monospace" font-size="20">Camera Stream — Toàn cảnh</text>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">
+  <rect width="320" height="240" fill="#0c1630"/>
+  <rect x="30" y="120" width="220" height="60" rx="8" fill="#1a2a4f" stroke="#274b91"/>
+  <circle cx="80" cy="190" r="18" fill="#0a1224" stroke="#2c4c8e"/>
+  <circle cx="220" cy="190" r="18" fill="#0a1224" stroke="#2c4c8e"/>
+  <rect x="170" y="135" width="60" height="24" fill="#11203d" stroke="#2c4c8e"/>
+  <rect x="110" y="125" width="56" height="22" fill="#11203d" stroke="#2c4c8e"/>
+  <rect x="40" y="140" width="60" height="16" fill="#13264a"/>
+  <rect x="210" y="158" width="28" height="10" fill="#d1e4ff"/>
+  <rect x="128" y="166" width="70" height="20" fill="#f6f7fb"/>
+  <text x="135" y="181" fill="#1a2a4f" font-family="monospace" font-size="14">59A-88888</text>
+  <text x="14" y="22" fill="#8fb3ff" font-family="monospace" font-size="14">Ảnh phương tiện</text>
+</svg>

@@ -1,0 +1,281 @@
+/* Gọn nhẹ: phần lớn style dùng Ant Design. Chỉ thêm tinh chỉnh + palette đồng bộ. */
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+#root { background: var(--bg); }
+
+/* Theme variables */
+:root[data-theme="dark"], :root:not([data-theme]){
+  --bg: #0b1220;
+  --card: #0f172a;
+  --muted: #9bb3cf;
+  --text: #e6edf7;
+  --primary: #7c3aed; /* violet */
+  --accent: #22d3ee; /* cyan */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --border: #1f2a44;
+  --radius: 12px;
+  --shadow: 0 8px 24px rgba(0,0,0,0.25);
+  --grad-primary: linear-gradient(135deg, #7c3aed 0%, #22d3ee 100%);
+  --grad-red: linear-gradient(135deg, #f43f5e 0%, #fb7185 100%);
+  --grad-cyan: linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%);
+  --grad-amber: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  --blur: saturate(180%) blur(10px);
+}
+
+:root[data-theme="light"]{
+  /* Nâng tương phản cho giao diện sáng */
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --muted: #334155; /* đậm hơn để dễ đọc */
+  --text: #0f172a;
+  --primary: #4f46e5; /* indigo đậm hơn */
+  --accent: #0891b2; /* cyan đậm hơn */
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --border: #cbd5e1; /* viền đậm hơn */
+  --radius: 12px;
+  --shadow: 0 6px 14px rgba(2,6,23,0.10);
+  --grad-primary: linear-gradient(135deg, #4f46e5 0%, #0891b2 100%);
+  --grad-red: linear-gradient(135deg, #dc2626 0%, #fb7185 100%);
+  --grad-cyan: linear-gradient(135deg, #0891b2 0%, #3b82f6 100%);
+  --grad-amber: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+  --blur: saturate(180%) blur(10px);
+}
+
+.brand-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); opacity: 0.9; }
+.brand-logo img { width: 24px; height: 24px; }
+.page-header { margin-bottom: 12px; font-weight: 700; font-size: 18px; color: var(--text); }
+.header-clock{ color: var(--muted); font-variant-numeric: tabular-nums; }
+.theme-group{ display:inline-flex; gap:6px; padding:2px; background: color-mix(in oklab, var(--card) 70%, transparent); border:1px solid var(--border); border-radius: 999px }
+.theme-group .ant-btn{ border: none }
+.app-container{ max-width: 1440px; margin: 0 auto; padding: 12px; background: var(--bg); }
+/* Header dính + hiệu ứng mờ để tăng tính phân cấp thị giác */
+.ant-layout{ background: var(--bg) !important; }
+.ant-layout-header{ position: sticky; top: 0; z-index: 100; background: color-mix(in oklab, var(--card) 92%, transparent); backdrop-filter: var(--blur); border-bottom: 1px solid var(--border); }
+.ant-layout-content{ background: var(--bg) !important; }
+.ant-menu-horizontal{ background: transparent }
+.ant-menu-horizontal>.ant-menu-item{ border-radius: 8px; margin-inline: 4px }
+.ant-menu-horizontal>.ant-menu-item-selected{ background: color-mix(in oklab, var(--primary) 20%, transparent) }
+/* Select - tối ưu màu dropdown và trạng thái chọn để dễ nhìn */
+.ant-select-dropdown{ background: var(--card) !important; border:1px solid var(--border) }
+.ant-select-item{ color: var(--text) }
+.ant-select-item-option-active{ background: color-mix(in oklab, var(--primary) 12%, transparent) !important }
+.ant-select-item-option-selected{ background: color-mix(in oklab, var(--primary) 28%, transparent) !important; color: #fff !important }
+.ant-select-multiple .ant-select-selection-item{ background: color-mix(in oklab, var(--primary) 20%, transparent); color: #e8eeff; border:none }
+.ant-select-multiple .ant-select-selection-item-remove{ color: #e8eeff }
+.ant-select-selector{ background: color-mix(in oklab, var(--card) 92%, transparent) !important; border-color: var(--border) !important }
+.ant-select:hover .ant-select-selector{ border-color: color-mix(in oklab, var(--primary) 40%, var(--border)) !important }
+.ant-select-open .ant-select-selector{ border-color: var(--primary) !important; box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 30%, transparent) }
+@media (max-width: 768px){
+  .brand-logo span{ display:none }
+  .ant-layout-header{ padding-inline: 8px !important }
+  .app-container{ padding: 8px }
+  .right-sticky{ position: static }
+  .scroll-body{ height: auto; max-height: none }
+}
+.section-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom: 10px; }
+.section-title{ font-weight:700; font-size: 16px; color: var(--text); }
+.section-extra{ display:flex; gap:8px; align-items:center; }
+.btn-row{ display:flex; gap:6px; align-items:center; white-space:nowrap; overflow:auto; padding-bottom:2px }
+.btn-row::-webkit-scrollbar{ height:6px }
+.btn-row .ant-btn{ flex:0 0 auto }
+.map-placeholder { height: 420px; display:flex; align-items:center; justify-content:center; border: 1px dashed var(--border); border-radius: var(--radius); color: var(--muted); background: var(--card) }
+
+/* Monitor tiles */
+.camera-tile{background: var(--card); border:1px solid var(--border); border-radius: var(--radius); overflow:hidden; box-shadow: var(--shadow); transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease}
+.camera-tile.focused{border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 40%, transparent), var(--shadow)}
+.camera-tile:hover{transform: translateY(-2px); border-color: color-mix(in oklab, var(--primary) 40%, var(--border))}
+.camera-tile::after{content:""; display:block; height:3px; background: var(--grad-primary)}
+.camera-stream{aspect-ratio: 16/9; height:auto; background: linear-gradient(180deg, rgba(148,163,184,0.12), rgba(148,163,184,0.18)); display:flex; width:100%; position: relative}
+.camera-stream-inner{flex:1; display:flex; align-items:center; justify-content:center; color: var(--muted)}
+.camera-footer{display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-top:1px solid var(--border)}
+.camera-name{font-weight:600; color: var(--text)}
+
+/* Overlay hiển thị mật độ phương tiện trên camera */
+.camera-density-overlay{
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 50px;
+  z-index: 10;
+}
+
+/* Operation Log styles */
+.operation-log-card .ant-card-head {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+
+.operation-log-card .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.operation-log-card .ant-card-body {
+  height: calc(100% - 48px) !important; /* Trừ đi height của header */
+  overflow: hidden !important;
+}
+
+.operation-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Custom scrollbar cho operation log */
+.operation-log-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.operation-log-list::-webkit-scrollbar-track {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.operation-log-list::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 3px;
+}
+
+.operation-log-list::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+.log-entry {
+  padding: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  flex-shrink: 0; /* Không cho phép co lại */
+}
+
+.log-entry:hover {
+  border-color: var(--primary);
+  background: color-mix(in oklab, var(--card) 96%, transparent);
+  transform: translateY(-1px);
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.log-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.vio-thumb{width:72px; height:72px; border-radius:10px}
+/* Item cũ vẫn giữ để không phá layout cũ nhưng đã tối ưu hover */
+.violation-item{position:relative; border:1px solid var(--border); border-radius: var(--radius); margin-bottom:10px; padding:8px; background: var(--card); box-shadow: var(--shadow); transition: transform .15s ease, border-color .2s ease, background .2s ease}
+.violation-item:hover{transform: translateY(-2px); border-color: color-mix(in oklab, var(--primary) 40%, var(--border)); background: color-mix(in oklab, var(--card) 96%, transparent)}
+.violation-item.t-red::before, .violation-item.t-cyan::before, .violation-item.t-gold::before{content:""; position:absolute; left:0; top:0; bottom:0; width:6px; border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius)}
+.violation-item.t-red::before{background: var(--grad-red)}
+.violation-item.t-cyan::before{background: var(--grad-cyan)}
+.violation-item.t-gold::before{background: var(--grad-amber)}
+
+/* Redesigned violation list item */
+.vl-item{display:grid; grid-template-columns: clamp(120px,22vw,180px) 1fr auto; gap:12px; align-items:center; border:1px solid var(--border); border-radius: var(--radius); padding:10px; background: var(--card); box-shadow: var(--shadow); margin-bottom:10px; transition: transform .15s ease, border-color .2s ease, background .2s ease}
+.vl-item:hover{transform: translateY(-2px); border-color: color-mix(in oklab, var(--primary) 40%, var(--border))}
+.vl-thumb{width: 100%; aspect-ratio: 16/10; border-radius:10px; background: color-mix(in oklab, var(--card) 92%, var(--primary)); border:1px solid var(--border); background-size: cover; background-position: center}
+.vl-thumb.has-img{border-color: color-mix(in oklab, var(--primary) 40%, var(--border))}
+.vl-content{display:flex; flex-direction:column; gap:6px}
+.vl-top{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
+.vl-typegroup{display:flex; gap:6px; flex-wrap:wrap}
+.vl-title{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.vl-meta{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.vl-status{display:flex; align-items:center}
+.right-sticky{ position: sticky; top: 12px; }
+.scroll-body{ height: 100%; overflow: auto; padding-right: 6px; padding-bottom: 8px }
+
+/* Detail modal */
+.viol-modal .viol-header{background: var(--card); border:1px solid var(--border); padding:10px 12px; border-radius: var(--radius); margin-bottom:12px}
+.img-tile{background: var(--card); border:1px solid var(--border); border-radius: var(--radius); display:flex; align-items:center; justify-content:center; overflow:hidden}
+.img-blank{width:100%; height:100%; border-radius: calc(var(--radius) - 2px); border:2px dashed var(--border); background: linear-gradient(180deg, color-mix(in oklab, var(--card) 90%, transparent), color-mix(in oklab, var(--card) 70%, transparent));}
+.img-tile.zoomable{cursor: zoom-in}
+.preview-img{width:100%; height:auto; display:block; border-radius: var(--radius); cursor: zoom-out}
+.preview-blank{width:100%; height:70vh; border-radius: var(--radius); border:2px dashed var(--border); background: linear-gradient(180deg, color-mix(in oklab, var(--card) 90%, transparent), color-mix(in oklab, var(--card) 70%, transparent)); cursor: zoom-out}
+.section-title{color: var(--muted); margin:6px 4px 12px}
+
+/* Thumb color by type */
+.thumb-red{background: var(--grad-red)}
+.thumb-cyan{background: var(--grad-cyan)}
+.thumb-gold{background: var(--grad-amber)}
+/* Tile số liệu đồng bộ với theme */
+.stats-tile{ background: var(--card); border:1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.stats-tile .ant-card-head{ border-bottom: 1px dashed var(--border); background: var(--card); }
+.stats-tile .ant-card-body{ background: var(--card); }
+.stats-tile .ant-statistic-title{ color: var(--muted); }
+.stats-tile .ant-statistic-content{ color: var(--text); }
+/* Đảm bảo không có border trắng và background nhất quán */
+.stats-tile .ant-card, .stats-tile .ant-card-bordered{ border-color: var(--border) !important; }
+.stats-tile .ant-card-head-title{ color: var(--text) !important; }
+.stats-tile .ant-statistic-title{ color: var(--muted) !important; }
+.stats-tile .ant-statistic-content{ color: var(--text) !important; }
+/* Loại bỏ hoàn toàn màu trắng */
+.stats-tile .ant-card-head, .stats-tile .ant-card-body{ background: var(--card) !important; }
+
+/* Modal thông tin vi phạm đẹp hơn */
+.info-card{ background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.info-card-title{ font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+.info-row{ display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid color-mix(in oklab, var(--border) 50%, transparent); }
+.info-row:last-child{ border-bottom: none; }
+.info-label{ font-size: 13px; color: var(--muted); font-weight: 500; }
+.info-value{ font-size: 13px; color: var(--text); font-weight: 600; text-align: right; }
+
+/* Violation Filter Panel - thiết kế đẹp */
+.violation-filter-panel{ background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.filter-header{ display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.filter-title{ font-size: 14px; font-weight: 600; color: var(--text); }
+.filter-count{ font-size: 12px; color: var(--muted); background: color-mix(in oklab, var(--primary) 15%, transparent); padding: 2px 8px; border-radius: 12px; }
+.filter-tabs{ display: grid; grid-template-columns: repeat(4, 1fr); }
+.filter-tab{ display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; cursor: pointer; transition: all 0.2s ease; border-bottom: 3px solid transparent; position: relative; }
+.filter-tab:hover{ background: color-mix(in oklab, var(--primary) 8%, transparent); }
+.filter-tab.active{ background: color-mix(in oklab, var(--primary) 12%, transparent); border-bottom-color: var(--primary); }
+.filter-tab.red.active{ border-bottom-color: #ef4444; }
+.filter-tab.cyan.active{ border-bottom-color: #06b6d4; }
+.filter-tab.gold.active{ border-bottom-color: #f59e0b; }
+.tab-label{ font-size: 11px; font-weight: 500; color: var(--text); text-align: center; }
+.tab-count{ font-size: 14px; font-weight: 700; color: var(--text); }
+.filter-tab.red .tab-count{ color: #ef4444; }
+.filter-tab.cyan .tab-count{ color: #06b6d4; }
+.filter-tab.gold .tab-count{ color: #f59e0b; }
+
+/* Violation List redesign - gọn gàng hơn */
+.vl-item-new{ display: flex; align-items: center; gap: 12px; padding: 10px; margin-bottom: 6px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); transition: all 0.2s ease; position: relative; }
+.vl-item-new::before{ content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--border); border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius); }
+.vl-item-new:hover{ transform: translateY(-1px); border-color: color-mix(in oklab, var(--primary) 40%, var(--border)); background: color-mix(in oklab, var(--card) 96%, transparent); box-shadow: 0 4px 12px color-mix(in oklab, var(--primary) 15%, transparent); }
+.vl-thumb-new{ width: 52px; height: 40px; border-radius: 8px; background: color-mix(in oklab, var(--card) 92%, var(--primary)); border: 1px solid var(--border); background-size: cover; background-position: center; flex-shrink: 0; }
+.vl-thumb-new.has-img{ border-color: color-mix(in oklab, var(--primary) 40%, var(--border)); }
+.vl-main{ flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.vl-header{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vl-details{ display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vl-time, .vl-plate, .vl-vehicle, .vl-speed{ font-size: 10px; color: var(--muted); background: color-mix(in oklab, var(--border) 30%, transparent); padding: 3px 6px; border-radius: 6px; font-weight: 500; }
+.vl-speed{ background: color-mix(in oklab, var(--warning) 20%, transparent); color: var(--warning); }
+.vl-status-new{ flex-shrink: 0; }
+/* Tag size nhỏ hơn trong violation list */
+.vl-header .ant-tag, .vl-status-new .ant-tag{ font-size: 10px; padding: 1px 6px; height: auto; line-height: 16px; }
