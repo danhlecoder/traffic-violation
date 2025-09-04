@@ -39,7 +39,7 @@ export default function ViolationList({ items, onClick, height }: { items: Viola
               <div onClick={() => onClick(v)} className="vl-item-new" style={{ cursor: 'pointer' }}>
                 {/* Thumbnail nhỏ gọn hơn */}
                 <div className={`vl-thumb-new ${hasImg ? 'has-img' : ''}`} style={hasImg ? { backgroundImage: `url(${thumbSrc})` } : undefined} />
-                
+
                 {/* Nội dung chính - compact layout */}
                 <div className="vl-main">
                   <div className="vl-header">
@@ -47,20 +47,20 @@ export default function ViolationList({ items, onClick, height }: { items: Viola
                     <Text strong style={{ fontSize: 13 }}>{v.cameraName}</Text>
                     <Text type="secondary" style={{ fontSize: 12 }}>• {v.location}</Text>
                   </div>
-                  
+
                   <div className="vl-details">
-                    <div className="vl-time">{new Date(v.time).toLocaleString('vi-VN', { 
-                      hour: '2-digit', 
-                      minute: '2-digit', 
-                      day: '2-digit', 
-                      month: '2-digit' 
+                    <div className="vl-time">{new Date(v.time).toLocaleString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      day: '2-digit',
+                      month: '2-digit'
                     })}</div>
                     <div className="vl-plate">{v.plate ?? 'Chưa nhận diện'}</div>
                     {v.vehicleType && <div className="vl-vehicle">{v.vehicleType}</div>}
                     {typeof v.speed === 'number' && <div className="vl-speed">{v.speed} km/h</div>}
                   </div>
                 </div>
-                
+
                 {/* Status ở góc phải */}
                 <div className="vl-status-new">
                   <Tag color={statusToColor(v.status)}>

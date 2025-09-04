@@ -146,7 +146,7 @@ export default function LiveMonitor() {
 
   // Pagination cho camera khi có quá nhiều
   const CAMERAS_PER_PAGE = 6 // Tối đa 6 camera (2 hàng x 3 cột)
-  
+
   const { allCams, totalPages } = useMemo(() => {
     let cams: typeof cameras = []
     if (focusedCamId) {
@@ -157,7 +157,7 @@ export default function LiveMonitor() {
     } else {
       cams = showAll ? cameras : cameras
     }
-    
+
     const pages = Math.max(1, Math.ceil(cams.length / CAMERAS_PER_PAGE))
     return { allCams: cams, totalPages: pages }
   }, [cameras, selectedCamIds, showAll, focusedCamId])
@@ -240,7 +240,7 @@ export default function LiveMonitor() {
               )}
             </div>
           </Card>
-          
+
           {/* Nhật ký thao tác */}
           <div style={{ height: '200px' }}>
             <OperationLog onSelect={({ plate, violationType, camera }) => {
@@ -277,28 +277,28 @@ export default function LiveMonitor() {
               <span className="filter-count">{filtered.length} mục</span>
             </div>
             <div className="filter-tabs">
-              <div 
+              <div
                 className={`filter-tab ${filter === 'Tất cả' ? 'active' : ''}`}
                 onClick={() => setFilter('Tất cả')}
               >
                 <span className="tab-label">Tất cả</span>
                 <span className="tab-count">{counts.total}</span>
               </div>
-              <div 
+              <div
                 className={`filter-tab red ${filter === 'Vượt đèn đỏ' ? 'active' : ''}`}
                 onClick={() => setFilter('Vượt đèn đỏ')}
               >
                 <span className="tab-label">Vượt đèn đỏ</span>
                 <span className="tab-count">{counts.red}</span>
               </div>
-              <div 
+              <div
                 className={`filter-tab cyan ${filter === 'Quá tốc độ' ? 'active' : ''}`}
                 onClick={() => setFilter('Quá tốc độ')}
               >
                 <span className="tab-label">Quá tốc độ</span>
                 <span className="tab-count">{counts.spd}</span>
               </div>
-              <div 
+              <div
                 className={`filter-tab gold ${filter === 'Không đội mũ' ? 'active' : ''}`}
                 onClick={() => setFilter('Không đội mũ')}
               >
