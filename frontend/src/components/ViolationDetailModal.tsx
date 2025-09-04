@@ -2,6 +2,7 @@ import { Modal, Row, Col, Tag, Button, Typography } from 'antd'
 import toast from 'react-hot-toast'
 import { useEffect, useState } from 'react'
 import type { Violation } from '../store/useStore'
+import { isPlaceholder } from '../utils/media'
 
 const { Text } = Typography
 
@@ -16,11 +17,6 @@ function statusColor(s: string): 'default' | 'processing' | 'success' | 'error' 
   if (s === 'Đã bỏ qua') return 'error'
   if (s === 'Mới') return 'warning'
   return 'default'
-}
-
-function isPlaceholder(u?: string) {
-  if (!u) return true
-  return u.includes('/placeholders/') || !u.trim()
 }
 
 export default function ViolationDetailModal({ open, onClose, data, onConfirm, onSkip, readOnly = false }: { open: boolean; onClose: () => void; data?: Violation; onConfirm?: () => void; onSkip?: () => void; readOnly?: boolean }) {

@@ -1,64 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Card, Empty, Space, Typography, Statistic, Row, Col, Tag, Select, DatePicker } from 'antd'
 import { useStore, VIOLATION_TYPES } from '../store/useStore'
-
-// Palette màu đơn giản theo index
-const palette = (i: number) => `hsl(${(i * 55) % 360} 80% 55%)`
-
-// Biểu đồ cột đơn giản (SVG)
-function SimpleBarChart({ data, height = 200 }: { data: Array<{ label: string; value: number; color?: string }>; height?: number }) {
-  const max = Math.max(1, ...data.map(d => d.value))
-  const barWidth = Math.max(12, Math.min(26, Math.floor(220 / Math.max(1, data.length))))
-  const gap = 12
-  const chartWidth = data.length * (barWidth + gap) + gap
-  return (
-    <div style={{ height }}>
-      <svg width="100%" height="100%" viewBox={`0 0 ${chartWidth} ${height}`} preserveAspectRatio="xMidYMid meet">
-        {data.map((d, i) => {
-          const h = Math.round(((d.value / max) * (height - 42)))
-          const x = gap + i * (barWidth + gap)
-          const y = height - 24 - h
-          return (
-            <g key={d.label}>
-              <rect x={x} y={y} width={barWidth} height={h} rx={4} fill={d.color || palette(i)} />
-              <text x={x + barWidth / 2} y={y - 4} textAnchor="middle" fontSize="11" fill="var(--text)" fontWeight={600}>{d.value}</text>
-            </g>
-          )}
-        )}
-      </svg>
-    </div>
-  )
-}
-
-// Biểu đồ tròn đơn giản (SVG)
-function SimplePieChart({ data, size = 200 }: { data: Array<{ label: string; value: number; color?: string }>; size?: number }) {
-  const total = Math.max(1, data.reduce((s, d) => s + d.value, 0))
-  const cx = size / 2
-  const cy = size / 2
-  const r = size / 2 - 10
-  let acc = 0
-  const strokes = data.map((d, i) => {
-    const angle = (d.value / total) * 2 * Math.PI
-    const x1 = cx + r * Math.cos(acc)
-    const y1 = cy + r * Math.sin(acc)
-    acc += angle
-    const x2 = cx + r * Math.cos(acc)
-    const y2 = cy + r * Math.sin(acc)
-    const largeArc = angle > Math.PI ? 1 : 0
-    const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`
-    return { path, color: d.color || palette(i) }
-  })
-  return (
-    <div style={{ height: size }}>
-      <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`} preserveAspectRatio="xMidYMid meet">
-        {strokes.map((s, i) => (
-          <path key={i} d={s.path} fill={s.color} opacity={0.9} />
-        ))}
-        <circle cx={cx} cy={cy} r={r} fill="transparent" stroke="var(--border)" strokeWidth="1" />
-      </svg>
-    </div>
-  )
-}
+import SimpleBarChart from '../components/charts/SimpleBarChart'
+import SimplePieChart from '../components/charts/SimplePieChart'
+import { palette } from '../components/charts/utils'
 
 export default function Reports() {
   const violations = useStore((s) => s.violations)
