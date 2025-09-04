@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useStore, VIOLATION_TYPES, Violation } from '../store/useStore'
-import { Table, Tag, Input, Select, Space, DatePicker, Button, Modal } from 'antd'
+import { Table, Tag, Input, Select, Space, DatePicker, Button } from 'antd'
 import ViolationDetailModal from '../components/ViolationDetailModal'
 import { confirmViolation, sendZalo, skipViolation } from '../services/api'
 import toast from 'react-hot-toast'
+import { confirmAction } from '../utils/confirm'
+import { downloadCsv } from '../utils/csv'
 
 export default function Violations() {
   const list = useStore((s) => s.violations)
@@ -40,32 +42,10 @@ export default function Violations() {
     'Đã bỏ qua': 'error',
   }
 
-  function downloadCsv() {
+  function onDownloadCsv() {
     const header = ['Thời gian','Loại','BSX','Camera','Vị trí','Trạng thái']
     const rows = filtered.map(v => [new Date(v.time).toLocaleString('vi-VN'), v.type, v.plate ?? '', v.cameraName, v.location, v.status])
-    const csv = [header, ...rows].map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'violations.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  function confirmAction(message: string) {
-    // Trả về true khi người dùng Xác nhận; false khi Hủy/đóng
-    return new Promise<boolean>((resolve) => {
-      const modal = Modal.confirm({
-        title: message,
-        okText: 'Xác nhận',
-        cancelText: 'Hủy',
-        centered: true,
-        maskClosable: true,
-        onOk: () => { modal.destroy(); resolve(true) },
-        onCancel: () => { modal.destroy(); resolve(false) },
-      })
-    })
+    downloadCsv('violations.csv', rows, header)
   }
 
   async function onConfirm(v: Violation): Promise<boolean> {
@@ -113,7 +93,7 @@ export default function Violations() {
     <>
       <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>Danh sách</span>
-        <Button onClick={downloadCsv}>Tải CSV</Button>
+        <Button onClick={onDownloadCsv}>Tải CSV</Button>
       </div>
       <Space style={{ marginBottom: 12 }} wrap>
         <Input placeholder="Tìm BSX, camera, địa điểm..." value={q} onChange={(e) => setQ(e.target.value)} allowClear style={{ minWidth: 220 }} />

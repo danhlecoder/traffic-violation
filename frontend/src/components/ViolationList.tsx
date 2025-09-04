@@ -1,5 +1,6 @@
 import { Card, List, Tag, Typography } from 'antd'
 import type { Violation } from '../store/useStore'
+import { isPlaceholder } from '../utils/media'
 
 const { Text } = Typography
 
@@ -7,10 +8,6 @@ function kindMeta(k: string) {
   if (k.includes('đèn đỏ')) return { tag: 'red', cls: 'is-red' }
   if (k.includes('tốc độ')) return { tag: 'cyan', cls: 'is-cyan' }
   return { tag: 'gold', cls: 'is-gold' }
-}
-
-function isPlaceholder(u?: string) {
-  return !u || !u.trim() || u.includes('/placeholders/')
 }
 
 function statusToColor(s: string): 'default' | 'processing' | 'success' | 'error' | 'warning' {

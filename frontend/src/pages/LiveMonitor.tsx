@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Row, Col, Space, Select, Button, Grid, Card, Pagination, Modal } from 'antd'
+import { Row, Col, Space, Select, Button, Grid, Card, Pagination } from 'antd'
 import { useStore, VIOLATION_TYPES, Violation } from '../store/useStore'
 import { confirmViolation, sendZalo, skipViolation } from '../services/api'
 import ViolationDetailModal from '../components/ViolationDetailModal'
@@ -8,6 +8,7 @@ import CameraTile from '../components/CameraTile'
 import OperationLog from '../components/OperationLog'
 import ViolationList from '../components/ViolationList'
 import SectionHeader from '../components/SectionHeader'
+import { confirmAction } from '../utils/confirm'
 
 function randomPlate() {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -88,19 +89,6 @@ export default function LiveMonitor() {
     const helm = pending.filter(v => v.type === 'Không đội mũ').length
     return { total, red, spd, helm }
   }, [violations])
-
-  function confirmAction(message: string) {
-    return new Promise<boolean>((resolve) => {
-      Modal.confirm({
-        title: message,
-        okText: 'Xác nhận',
-        cancelText: 'Hủy',
-        centered: true,
-        onOk: () => resolve(true),
-        onCancel: () => resolve(false),
-      })
-    })
-  }
 
   async function onConfirm(v: Violation) {
     const ok = await confirmAction('Xác nhận vi phạm này?')
