@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from pathlib import Path
 
-from .rtsp_stream.streamer import generate_mjpeg
+from .src.rtsp_stream.streamer import generate_mjpeg
 
 
 app = FastAPI(title="Traffic Violation Backend", version="0.1.0")
@@ -55,6 +55,7 @@ def root():
 def favicon():
     repo_root = Path(__file__).resolve().parent.parent
     candidates = [
+        repo_root / "frontend" / "dist" / "logo.png",
         repo_root / "frontend" / "public" / "logo.png",
     ]
     for p in candidates:
