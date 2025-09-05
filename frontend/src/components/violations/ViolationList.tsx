@@ -1,25 +1,9 @@
 import { Card, List, Tag, Typography } from 'antd'
-import type { Violation } from '../store/useStore'
-import { isPlaceholder } from '../utils/media'
+import type { Violation } from '../../store/useStore'
+import { isPlaceholder } from '../../utils/media'
+import { STATUS_TAG_COLOR, getViolationTypes, violationTypeToTagColor } from '../../constants/violations'
 
 const { Text } = Typography
-
-function kindMeta(k: string) {
-  if (k.includes('đèn đỏ')) return { tag: 'red', cls: 'is-red' }
-  if (k.includes('tốc độ')) return { tag: 'cyan', cls: 'is-cyan' }
-  return { tag: 'gold', cls: 'is-gold' }
-}
-
-function statusToColor(s: string): 'default' | 'processing' | 'success' | 'error' | 'warning' {
-  if (s === 'Đã xác nhận') return 'processing'
-  if (s === 'Đã bỏ qua') return 'default'
-  return 'warning'
-}
-
-function getTypes(v: any): string[] {
-  if (Array.isArray(v?.types) && v.types.length) return v.types as string[]
-  return [v.type]
-}
 
 export default function ViolationList({ items, onClick, height }: { items: Violation[]; onClick: (v: Violation) => void; height?: number | string }) {
   return (
@@ -28,8 +12,7 @@ export default function ViolationList({ items, onClick, height }: { items: Viola
         <List
           dataSource={items}
           renderItem={(v) => {
-            const types = getTypes(v)
-            const km = kindMeta(types[0] || v.type)
+            const types = getViolationTypes(v)
             const thumbSrc = isPlaceholder(v.images?.overview) ? undefined : v.images.overview
             const hasImg = Boolean(thumbSrc)
             return (
@@ -40,7 +23,7 @@ export default function ViolationList({ items, onClick, height }: { items: Viola
                 {/* Nội dung chính - compact layout */}
                 <div className="vl-main">
                   <div className="vl-header">
-                    <Tag color={kindMeta(types[0] || v.type).tag}>{types[0] || v.type}</Tag>
+                    <Tag color={violationTypeToTagColor(types[0] || v.type)}>{types[0] || v.type}</Tag>
                     <Text strong style={{ fontSize: 13 }}>{v.cameraName}</Text>
                     <Text type="secondary" style={{ fontSize: 12 }}>• {v.location}</Text>
                   </div>
@@ -60,7 +43,7 @@ export default function ViolationList({ items, onClick, height }: { items: Viola
 
                 {/* Status ở góc phải */}
                 <div className="vl-status-new">
-                  <Tag color={statusToColor(v.status)}>
+                  <Tag color={STATUS_TAG_COLOR[v.status]}>
                     {v.status === 'Mới' ? 'Chờ duyệt' : v.status}
                   </Tag>
                 </div>

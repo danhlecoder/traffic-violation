@@ -4,6 +4,7 @@ import { useStore, VIOLATION_TYPES } from '../store/useStore'
 import SimpleBarChart from '../components/charts/SimpleBarChart'
 import SimplePieChart from '../components/charts/SimplePieChart'
 import { palette } from '../components/charts/utils'
+import { VIOLATION_STATUSES, STATUS_TAG_COLOR } from '../constants/violations'
 
 export default function Reports() {
   const violations = useStore((s) => s.violations)
@@ -38,11 +39,7 @@ export default function Reports() {
   const barData = useMemo(() => groupedByType.map(([label, value], i) => ({ label, value, color: palette(i) })), [groupedByType])
   const pieData = barData
 
-  const statusColor: Record<string, string> = {
-    'Mới': 'warning',
-    'Đã xác nhận': 'processing',
-    'Đã bỏ qua': 'error',
-  }
+  const statusColor = STATUS_TAG_COLOR
 
   const cameraOptions = [{ value: 'ALL', label: 'Tất cả camera' }, ...cameras.map(c => ({ value: c.id, label: `${c.name} — ${c.location}` }))]
   const cameraLabel = cameraOptions.find(o => o.value === cameraId)?.label || 'Tất cả camera'
@@ -121,7 +118,7 @@ export default function Reports() {
 
       <Card title="Theo trạng thái (tất cả)">
         <Space size={12} wrap>
-          {(['Mới','Đã xác nhận','Đã bỏ qua'] as const).map(s => (
+          {VIOLATION_STATUSES.map(s => (
             <Tag key={s} color={statusColor[s]}>{s}: {violations.filter(v=> v.status===s).length}</Tag>
           ))}
         </Space>
