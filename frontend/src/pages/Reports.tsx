@@ -4,6 +4,7 @@ import { useStore, VIOLATION_TYPES } from '../store/useStore'
 import SimpleBarChart from '../components/charts/SimpleBarChart'
 import SimplePieChart from '../components/charts/SimplePieChart'
 import { palette } from '../components/charts/utils'
+import { VIOLATION_STATUSES } from '../constants/violations'
 
 export default function Reports() {
   const violations = useStore((s) => s.violations)
@@ -121,7 +122,7 @@ export default function Reports() {
 
       <Card title="Theo trạng thái (tất cả)">
         <Space size={12} wrap>
-          {(['Mới','Đã xác nhận','Đã bỏ qua'] as const).map(s => (
+          {VIOLATION_STATUSES.map(s => (
             <Tag key={s} color={statusColor[s]}>{s}: {violations.filter(v=> v.status===s).length}</Tag>
           ))}
         </Space>
