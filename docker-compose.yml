@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: traffic_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend:rw
+      - ./requirements.txt:/app/requirements.txt:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: traffic_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend:rw
+      - /app/frontend/node_modules
+    environment:
+      - VITE_API_BASE=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  default:
+    name: traffic_net
+    driver: bridge

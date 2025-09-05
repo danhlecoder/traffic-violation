@@ -21,6 +21,14 @@ export default function CameraTile({
   vehicleDensity?: number;
 }) {
   const ready = useMemo(() => Boolean(rtsp), [rtsp])
+
+  const streamSrc = useMemo(() => {
+    if (!rtsp) return undefined
+    // Prefer explicit env base if provided, else same host on port 8000
+    const base = (import.meta as any)?.env?.VITE_API_BASE
+      || `${window.location.protocol}//${window.location.hostname}:8000`
+    return `${base}/api/stream?src=${encodeURIComponent(rtsp)}`
+  }, [rtsp])
   
   // Xác định màu badge dựa trên mật độ
   const getDensityColor = (density: number) => {
@@ -41,9 +49,17 @@ export default function CameraTile({
   return (
     <div className={`camera-tile ${focused ? 'focused' : ''}`} onDoubleClick={onDoubleClick} title="Nhấp đúp để phóng to/thu nhỏ" style={{ cursor: focused ? 'zoom-out' : 'zoom-in' }}>
       <div className="camera-stream" style={height ? { height } : undefined}>
-        <div className="camera-stream-inner">
-          <div className="camera-stream-text">{ready ? 'Đang hiển thị stream' : 'Chưa cấu hình stream'}</div>
-        </div>
+        {ready && streamSrc ? (
+          <img
+            src={streamSrc}
+            alt={name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div className="camera-stream-inner">
+            <div className="camera-stream-text">Chưa cấu hình stream</div>
+          </div>
+        )}
       </div>
       
       {/* Hiển thị mật độ phương tiện trên camera */}

@@ -68,8 +68,11 @@ export default function LiveMonitor() {
 
   // Tạo luồng dữ liệu giả lập
   useEffect(() => {
+    if (!cameras || cameras.length === 0) return
     const interval = setInterval(() => {
+      if (!cameras || cameras.length === 0) return
       const cam = cameras[Math.floor(Math.random() * cameras.length)]
+      if (!cam) return
       const v = createMockViolation(cam, useStore.getState().settings)
       addViolation(v)
     }, 5000)
