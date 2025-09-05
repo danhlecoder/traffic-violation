@@ -24,7 +24,7 @@ frontend/
 │  │  ├─ ThemeToggle.tsx      # Nút chuyển theme light/dark/system
 │  │  ├─ charts/              # Biểu đồ đơn giản (SVG thuần)
 │  │  │  ├─ SimpleBarChart.tsx  # Biểu đồ cột, hiển thị giá trị
-+│  │  │  ├─ SimplePieChart.tsx  # Biểu đồ tròn, có nhãn %
+│  │  │  ├─ SimplePieChart.tsx  # Biểu đồ tròn, có nhãn %
 │  │  │  └─ utils.ts            # Hàm cung cấp bảng màu `palette`
 │  │  └─ violations/          # Nhóm component cho tính năng Vi phạm
 │  │     ├─ ViolationsFilter.tsx     # Bộ lọc (search/camera/loại/trạng thái/time)
