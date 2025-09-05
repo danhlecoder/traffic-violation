@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Row, Col, Space, Select, Button, Grid, Card, Pagination } from 'antd'
 import { useStore, VIOLATION_TYPES, Violation } from '../store/useStore'
-import { confirmViolation, sendZalo, skipViolation } from '../services/api'
-import ViolationDetailModal from '../components/ViolationDetailModal'
+import { confirmViolation, skipViolation } from '../services/violations'
+import { sendZalo } from '../services/zalo'
+import ViolationDetailModal from '../components/violations/ViolationDetailModal'
 import CameraTile from '../components/CameraTile'
 import OperationLog from '../components/OperationLog'
-import ViolationList from '../components/ViolationList'
+import ViolationList from '../components/violations/ViolationList'
 import SectionHeader from '../components/SectionHeader'
 import { confirmAction } from '../utils/confirm'
 
@@ -90,9 +91,9 @@ export default function LiveMonitor() {
     return { total, red, spd, helm }
   }, [violations])
 
-  async function onConfirm(v: Violation) {
+  async function onConfirm(v: Violation): Promise<boolean> {
     const ok = await confirmAction('Xác nhận vi phạm này?')
-    if (!ok) return
+    if (!ok) return false
     await confirmViolation(v.id)
     updateViolation(v.id, { status: 'Đã xác nhận' })
     toast.success('Đã xác nhận vi phạm')
@@ -109,6 +110,7 @@ export default function LiveMonitor() {
     if (zaloToken && zaloTargetId) {
       await sendZalo(v, zaloToken, zaloTargetId)
     }
+    return true
   }
 
   async function onSkip(v: Violation): Promise<boolean> {
@@ -305,8 +307,8 @@ export default function LiveMonitor() {
         open={!!selected}
         onClose={() => setSelected(null)}
         data={selected ?? undefined}
-        onConfirm={() => selected && onConfirm(selected)}
-        onSkip={() => selected && onSkip(selected)}
+        onConfirm={async () => (selected ? await onConfirm(selected) : false)}
+        onSkip={async () => (selected ? await onSkip(selected) : false)}
         readOnly={modalReadOnly}
       />
     </Row>

@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react'
 import { useStore, VIOLATION_TYPES, Violation } from '../store/useStore'
 import { Table, Tag, Button } from 'antd'
-import ViolationDetailModal from '../components/ViolationDetailModal'
-import { confirmViolation, sendZalo, skipViolation } from '../services/api'
+import ViolationDetailModal from '../components/violations/ViolationDetailModal'
+import { confirmViolation } from '../services/violations'
+import { skipViolation } from '../services/violations'
+import { sendZalo } from '../services/zalo'
 import toast from 'react-hot-toast'
 import { confirmAction } from '../utils/confirm'
 import { downloadCsv } from '../utils/csv'
 import ViolationsFilter from '../components/violations/ViolationsFilter'
+import { STATUS_TAG_COLOR } from '../constants/violations'
+import type { ViolationStatus } from '../store/useStore'
 
 export default function Violations() {
   const list = useStore((s) => s.violations)
@@ -37,11 +41,7 @@ export default function Violations() {
     })
   }, [list, q, type, cameraId, status, range])
 
-  const statusColor: Record<string, string> = {
-    'Mới': 'default',
-    'Đã xác nhận': 'processing',
-    'Đã bỏ qua': 'error',
-  }
+  const statusColor = STATUS_TAG_COLOR
 
   function onDownloadCsv() {
     const header = ['Thời gian','Loại','BSX','Camera','Vị trí','Trạng thái']
@@ -118,7 +118,7 @@ export default function Violations() {
           { title: 'BSX', dataIndex: 'plate', render: (x: string) => x ?? '—' },
           { title: 'Camera', dataIndex: 'cameraName' },
           { title: 'Vị trí', dataIndex: 'location' },
-          { title: 'Trạng thái', dataIndex: 'status', render: (s: string) => <Tag color={statusColor[s]}>{s}</Tag> },
+          { title: 'Trạng thái', dataIndex: 'status', render: (s: string) => <Tag color={statusColor[s as ViolationStatus]}>{s === 'Mới' ? 'Chờ duyệt' : s}</Tag> },
           { title: 'Ảnh', dataIndex: ['images', 'vehicle'], render: (_: string, v: Violation) => <a onClick={() => setSelected(v)}>Xem</a> },
         ]}
       />

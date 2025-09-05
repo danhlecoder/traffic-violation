@@ -1,26 +1,15 @@
 import { Modal, Row, Col, Tag, Button, Typography } from 'antd'
 import toast from 'react-hot-toast'
 import { useEffect, useState } from 'react'
-import type { Violation } from '../store/useStore'
-import { isPlaceholder } from '../utils/media'
+import type { Violation } from '../../store/useStore'
+import { isPlaceholder } from '../../utils/media'
+import { STATUS_TAG_COLOR, violationTypeToTagColor } from '../../constants/violations'
+import type { ViolationStatus } from '../../store/useStore'
 
 const { Text } = Typography
 
-function typeColor(t: string) {
-  if (t.includes('đèn đỏ')) return { tag: 'red' }
-  if (t.includes('tốc độ')) return { tag: 'cyan' }
-  return { tag: 'gold' }
-}
-
-function statusColor(s: string): 'default' | 'processing' | 'success' | 'error' | 'warning' {
-  if (s === 'Đã xác nhận') return 'processing'
-  if (s === 'Đã bỏ qua') return 'error'
-  if (s === 'Mới') return 'warning'
-  return 'default'
-}
-
-export default function ViolationDetailModal({ open, onClose, data, onConfirm, onSkip, readOnly = false }: { open: boolean; onClose: () => void; data?: Violation; onConfirm?: () => void; onSkip?: () => void; readOnly?: boolean }) {
-  const t = data ? typeColor(data.type) : undefined
+export default function ViolationDetailModal({ open, onClose, data, onConfirm, onSkip, readOnly = false }: { open: boolean; onClose: () => void; data?: Violation; onConfirm?: () => Promise<boolean>; onSkip?: () => Promise<boolean>; readOnly?: boolean }) {
+  const t = data ? { tag: violationTypeToTagColor(data.type) } : undefined
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const [acting, setActing] = useState<'confirm' | 'skip' | null>(null)
@@ -52,9 +41,9 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
     if (!isPending || readOnly || acting) return
     try {
       setActing('confirm')
-      await Promise.resolve(onConfirm?.())
-      // Cập nhật cục bộ để khóa nút ngay lập tức
-      setFinalStatus('Đã xác nhận')
+      const ok = await Promise.resolve(onConfirm?.())
+      // Chỉ cập nhật cục bộ khi thao tác thành công
+      if (ok === true) setFinalStatus('Đã xác nhận')
     } finally {
       setActing(null)
     }
@@ -64,9 +53,9 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
     if (!isPending || readOnly || acting) return
     try {
       setActing('skip')
-      await Promise.resolve(onSkip?.())
-      // Cập nhật cục bộ để khóa nút ngay lập tức
-      setFinalStatus('Đã bỏ qua')
+      const ok = await Promise.resolve(onSkip?.())
+      // Chỉ cập nhật cục bộ khi thao tác thành công
+      if (ok === true) setFinalStatus('Đã bỏ qua')
     } finally {
       setActing(null)
     }
@@ -83,7 +72,7 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
                 <Text strong>{data.cameraName}</Text>
                 <Text type="secondary">• {data.location || '—'}</Text>
                 {data.vehicleType && <Tag>{data.vehicleType}</Tag>}
-                <Tag color={statusColor(status)}>{status === 'Mới' ? 'Chờ duyệt' : status}</Tag>
+                <Tag color={STATUS_TAG_COLOR[status as ViolationStatus]}>{status === 'Mới' ? 'Chờ duyệt' : status}</Tag>
               </div>
               <div>
                 <Button size="small" onClick={() => { if (videoUrl) { setVideoOpen(true) } else { toast('Chưa có video minh chứng', { icon: 'ℹ️' }) } }}>Xem video</Button>
@@ -168,7 +157,7 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
                   </div>
                   <div className="info-row">
                     <span className="info-label">Trạng thái</span>
-                    <Tag color={statusColor(status)} style={{ marginLeft: 'auto' }}>
+                    <Tag color={STATUS_TAG_COLOR[status as ViolationStatus]} style={{ marginLeft: 'auto' }}>
                       {status === 'Mới' ? 'Chờ duyệt' : status}
                     </Tag>
                   </div>
