@@ -6,7 +6,7 @@
 ## Khởi động (Docker Compose)
 1) Build & chạy:
    - Linux/macOS: `./run.sh`
-   - Hoặc: `docker-compose up --build`
+   - Hoặc: `docker compose up --build`
 
 2) Truy cập:
    - Frontend: http://localhost:5173
