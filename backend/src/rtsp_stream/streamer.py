@@ -2,6 +2,7 @@ import time
 from typing import Generator, Optional
 
 import cv2
+from ..utils.logger import stream_logger as log
 
 
 def open_capture(src: str, reconnect: bool = True, timeout_sec: int = 5) -> Optional[cv2.VideoCapture]:
@@ -28,8 +29,10 @@ def generate_mjpeg(src: str, fps: int = 30, jpeg_quality: int = 80) -> Generator
     boundary = b"--frame"
     delay = 1.0 / max(1, fps)
 
+    log.info(f"open source: {src}")
     cap = open_capture(src)
     if cap is None:
+        log.error("failed to open source")
         # Yield a single empty payload to let client handle error gracefully
         yield boundary + b"\r\nContent-Type: image/jpeg\r\n\r\n" + b"" + b"\r\n"
         return
@@ -41,8 +44,10 @@ def generate_mjpeg(src: str, fps: int = 30, jpeg_quality: int = 80) -> Generator
             if not ok or frame is None:
                 # Try to reconnect once
                 cap.release()
+                log.warning("lost frame, reconnecting…")
                 cap = open_capture(src)
                 if cap is None:
+                    log.error("reconnect failed; stop stream")
                     break
                 continue
 
@@ -72,3 +77,4 @@ def generate_mjpeg(src: str, fps: int = 30, jpeg_quality: int = 80) -> Generator
             cap.release()
         except Exception:
             pass
+        log.info("stream closed")

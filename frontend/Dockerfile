@@ -2,9 +2,11 @@ FROM node:18-alpine
 
 WORKDIR /app/frontend
 
+# Copy package files first for better caching
 COPY frontend/package*.json ./
 RUN npm ci
 
+# Copy source code (this layer will be rebuilt when code changes)
 COPY frontend .
 
 EXPOSE 5173

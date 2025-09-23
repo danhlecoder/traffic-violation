@@ -4,7 +4,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 #root { background: var(--bg); }
 
 /* Theme variables */
-:root[data-theme="dark"], :root:not([data-theme]){
+html[data-theme="dark"], html:not([data-theme]){
   --bg: #0b1220;
   --card: #0f172a;
   --muted: #9bb3cf;
@@ -24,7 +24,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
   --blur: saturate(180%) blur(10px);
 }
 
-:root[data-theme="light"]{
+html[data-theme="light"]{
   /* Nâng tương phản cho giao diện sáng */
   --bg: #f5f7fb;
   --card: #ffffff;
