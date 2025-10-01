@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { CameraRegion } from '../types/regions'
 
 export type ViolationType = 'Vượt đèn đỏ' | 'Không đội mũ' | 'Quá tốc độ'
 export type ViolationStatus = 'Mới' | 'Đã xác nhận' | 'Đã bỏ qua'
@@ -37,6 +38,8 @@ export interface Settings {
   monitorShowAll: boolean
   monitorFocusedCamId: string | null
   monitorPage: number
+  /** Per-camera drawing regions for red-light line and traffic-light ROI */
+  cameraRegions: Record<string, CameraRegion>
 }
 
 export interface OperationLogEntry {
@@ -58,6 +61,10 @@ interface State {
   addOperationLog: (entry: OperationLogEntry) => void
   settings: Settings
   updateSettings: (patch: Partial<Settings>) => void
+  /** Merge/update a camera's region config */
+  setCameraRegion: (cameraId: string, patch: Partial<CameraRegion>) => void
+  /** Clear a camera region (target part or all) */
+  clearCameraRegion: (cameraId: string, target?: 'stopLine' | 'roi' | 'all') => void
 }
 
 const initialSettings: Settings = {
@@ -74,6 +81,7 @@ const initialSettings: Settings = {
   monitorShowAll: true,
   monitorFocusedCamId: null,
   monitorPage: 0,
+  cameraRegions: {},
 }
 
 export const useStore = create<State>((set) => ({
@@ -88,6 +96,32 @@ export const useStore = create<State>((set) => ({
   })),
   settings: initialSettings,
   updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+  setCameraRegion: (cameraId, patch) => set((s) => {
+    const currentRegions = s.settings.cameraRegions || {}
+    const prev = currentRegions[cameraId] || {}
+    const next = { ...prev, ...patch }
+    return {
+      settings: {
+        ...s.settings,
+        cameraRegions: { ...currentRegions, [cameraId]: next },
+      },
+    }
+  }),
+  clearCameraRegion: (cameraId, target) => set((s) => {
+    const map = { ...(s.settings.cameraRegions || {}) }
+    if (!target || target === 'all') {
+      delete map[cameraId]
+    } else {
+      const prev = map[cameraId]
+      if (prev) {
+        const updated: CameraRegion = { ...prev }
+        if (target === 'stopLine') delete (updated as any).stopLine
+        if (target === 'roi') delete (updated as any).roi
+        map[cameraId] = updated
+      }
+    }
+    return { settings: { ...s.settings, cameraRegions: map } }
+  }),
 }))
 
 export const VIOLATION_TYPES: ViolationType[] = ['Vượt đèn đỏ', 'Không đội mũ', 'Quá tốc độ']

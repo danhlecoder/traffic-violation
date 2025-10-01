@@ -205,6 +205,7 @@ export default function LiveMonitor() {
                 {displayCams.map(cam => (
                   <Col key={cam.id} {...camSpan}>
                     <CameraTile
+                      cameraId={cam.id}
                       name={cam.name}
                       location={cam.location}
                       rtsp={cam.rtsp}
