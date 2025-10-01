@@ -23,7 +23,7 @@ export async function fetchSnapshotBlob(rtsp: string): Promise<Blob> {
 
 // API quản lý camera và vùng vẽ
 export type Point = { x: number; y: number }
-export type CameraRegionDto = { stopLine?: [Point, Point]; roi?: Point[] }
+export type CameraRegionDto = { stopLine?: [Point, Point] | null; roi?: Point[] | null }
 export type CameraDto = { id: string; name: string; rtsp: string; location: string; regions?: CameraRegionDto }
 
 export async function listCameras(): Promise<CameraDto[]> {

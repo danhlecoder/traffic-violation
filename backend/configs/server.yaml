@@ -2,7 +2,7 @@
 
 database:
   mongo_camera:
-    host: localhost
+    host: mongo
     port: 27017
     database: traffic
     username: ""

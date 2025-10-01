@@ -94,12 +94,28 @@ export default function RegionEditorModal({
                   </Tooltip>
                   {cameraRegion.stopLine && (
                     <Tooltip title="Xóa vạch dừng">
-                      <Button size="small" danger icon={<ClearOutlined />} onClick={() => clearCameraRegion(cameraId, 'stopLine')}>Xóa line</Button>
+                      <Button
+                        size="small"
+                        danger
+                        icon={<ClearOutlined />}
+                        onClick={async () => {
+                          clearCameraRegion(cameraId, 'stopLine')
+                          try { await streams.updateCameraRegions(cameraId, { stopLine: null }) } catch {}
+                        }}
+                      >Xóa line</Button>
                     </Tooltip>
                   )}
                   {cameraRegion.roi && (
                     <Tooltip title="Xóa ROI">
-                      <Button size="small" danger icon={<ClearOutlined />} onClick={() => clearCameraRegion(cameraId, 'roi')}>Xóa ROI</Button>
+                      <Button
+                        size="small"
+                        danger
+                        icon={<ClearOutlined />}
+                        onClick={async () => {
+                          clearCameraRegion(cameraId, 'roi')
+                          try { await streams.updateCameraRegions(cameraId, { roi: null }) } catch {}
+                        }}
+                      >Xóa ROI</Button>
                     </Tooltip>
                   )}
                 </Space>
