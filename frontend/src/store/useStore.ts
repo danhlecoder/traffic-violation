@@ -67,6 +67,7 @@ interface State {
   clearCameraRegion: (cameraId: string, target?: 'stopLine' | 'roi' | 'all') => void
 }
 
+// Ghi chú: cấu hình mặc định cho ứng dụng (sẽ được merge với cấu hình đã lưu trong localStorage)
 const initialSettings: Settings = {
   speedLimit: 60,
   enableHelmetCheck: true,
@@ -84,6 +85,20 @@ const initialSettings: Settings = {
   cameraRegions: {},
 }
 
+// Tải cấu hình đã lưu từ localStorage (nếu có) và hợp nhất với mặc định
+function loadPersistedSettings(): Settings {
+  try {
+    if (typeof window === 'undefined') return initialSettings
+    const raw = localStorage.getItem('tv-settings')
+    if (!raw) return initialSettings
+    const parsed = JSON.parse(raw)
+    // Merge nông để tránh mất field mới thêm
+    return { ...initialSettings, ...parsed, cameraRegions: parsed?.cameraRegions || {} }
+  } catch {
+    return initialSettings
+  }
+}
+
 export const useStore = create<State>((set) => ({
   violations: [],
   addViolation: (v) => set((s) => ({ violations: [v, ...s.violations] })),
@@ -94,18 +109,29 @@ export const useStore = create<State>((set) => ({
   addOperationLog: (entry) => set((s) => ({
     operationLogs: [entry, ...s.operationLogs].slice(0, 200),
   })),
-  settings: initialSettings,
-  updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+  // Khởi tạo settings từ localStorage nếu có
+  settings: loadPersistedSettings(),
+  // Cập nhật settings và đồng thời lưu xuống localStorage để giữ lại sau khi refresh
+  updateSettings: (patch) => set((s) => {
+    const next = { ...s.settings, ...patch }
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('tv-settings', JSON.stringify(next))
+      }
+    } catch {}
+    return { settings: next }
+  }),
   setCameraRegion: (cameraId, patch) => set((s) => {
     const currentRegions = s.settings.cameraRegions || {}
     const prev = currentRegions[cameraId] || {}
     const next = { ...prev, ...patch }
-    return {
-      settings: {
-        ...s.settings,
-        cameraRegions: { ...currentRegions, [cameraId]: next },
-      },
+    const settings = {
+      ...s.settings,
+      cameraRegions: { ...currentRegions, [cameraId]: next },
     }
+    // Lưu lại cấu hình sau khi cập nhật vùng vẽ
+    try { if (typeof window !== 'undefined') localStorage.setItem('tv-settings', JSON.stringify(settings)) } catch {}
+    return { settings }
   }),
   clearCameraRegion: (cameraId, target) => set((s) => {
     const map = { ...(s.settings.cameraRegions || {}) }
@@ -120,7 +146,9 @@ export const useStore = create<State>((set) => ({
         map[cameraId] = updated
       }
     }
-    return { settings: { ...s.settings, cameraRegions: map } }
+    const settings = { ...s.settings, cameraRegions: map }
+    try { if (typeof window !== 'undefined') localStorage.setItem('tv-settings', JSON.stringify(settings)) } catch {}
+    return { settings }
   }),
 }))
 

@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
-from .routers import streams_router
+from .routers import streams_router, cameras_router
+from .src.services.db import init_indexes
 
 
 app = FastAPI(title="Traffic Violation Backend", version="0.1.0")
@@ -27,9 +28,15 @@ def health():
 
 
 app.include_router(streams_router)
+app.include_router(cameras_router)
 
 
 if __name__ == "__main__":
     import uvicorn
 
+    # Khởi tạo index MongoDB trước khi chạy (chỉ khi chạy trực tiếp)
+    try:
+        init_indexes()
+    except Exception:
+        pass
     uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)

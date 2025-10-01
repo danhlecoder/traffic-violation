@@ -1,10 +1,11 @@
 import { Badge, Typography, Tag, Button, Tooltip } from 'antd'
-import { useMemo, useRef, useState, useCallback, useEffect } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { EditOutlined } from '@ant-design/icons'
 import { buildStreamUrl, fetchSnapshotBlob } from '../services/streams'
 import RegionEditorModal from './RegionEditorModal'
 import RegionOverlay from './RegionOverlay'
 import { useStore } from '../store/useStore'
+import { useElementScaler } from '../hooks/useElementScaler'
 
 const { Text } = Typography
 
@@ -28,29 +29,23 @@ export default function CameraTile({
   vehicleDensity?: number;
 }) {
   const ready = useMemo(() => Boolean(rtsp), [rtsp])
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  const { ref: containerRef, toPixel } = useElementScaler<HTMLDivElement>()
   const [editorOpen, setEditorOpen] = useState(false)
   const [snapshot, setSnapshot] = useState<string | undefined>(undefined)
   const regions = useStore((s) => s.settings.cameraRegions)
   const cameraRegion = regions[cameraId] || {}
-
-  const toPixel = useCallback((pt: { x: number; y: number }) => {
-    const el = containerRef.current
-    if (!el) return { x: 0, y: 0 }
-    const rect = el.getBoundingClientRect()
-    return { x: pt.x * rect.width, y: pt.y * rect.height }
-  }, [])
 
   const streamSrc = useMemo(() => (rtsp ? buildStreamUrl(rtsp) : undefined), [rtsp])
 
   // Capture a snapshot via backend endpoint; fallback to canvas if needed
   const takeSnapshot = useCallback(async () => {
     if (!rtsp) return
+    // Mở modal ngay lập tức, ảnh snapshot sẽ tải bất đồng bộ
+    setEditorOpen(true)
     try {
       const blob = await fetchSnapshotBlob(rtsp)
       const objectUrl = URL.createObjectURL(blob)
       setSnapshot(objectUrl)
-      setEditorOpen(true)
       return
     } catch (e) {
       // Fallback to canvas from the <img> element
@@ -74,7 +69,6 @@ export default function CameraTile({
       } else {
         setSnapshot(undefined)
       }
-      setEditorOpen(true)
     }
   }, [rtsp])
 

@@ -1,9 +1,11 @@
 import { Modal, Button, Space, Tooltip, Typography } from 'antd'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useRef } from 'react'
 import { LineOutlined, HighlightOutlined, ClearOutlined, CheckOutlined, CloseOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useStore } from '../store/useStore'
 import RegionOverlay from './RegionOverlay'
-import type { Point } from '../types/regions'
+import { useElementScaler } from '../hooks/useElementScaler'
+import { useRegionDrawing } from '../hooks/useRegionDrawing'
+import { streams } from '../services/api'
 
 const { Text } = Typography
 
@@ -25,85 +27,29 @@ export default function RegionEditorModal({
   const clearCameraRegion = useStore((s) => s.clearCameraRegion)
   const cameraRegion = regions[cameraId] || {}
 
-  const [mode, setMode] = useState<Mode>('idle')
-  const [tempLine, setTempLine] = useState<{ p1?: Point; p2?: Point }>({})
-  const [tempRoi, setTempRoi] = useState<Array<Point>>([])
-  const containerRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!open) {
-      setMode('idle')
-      setTempLine({})
-      setTempRoi([])
+  const { ref: containerRef, toRelative, toPixel } = useElementScaler<HTMLDivElement>()
+  const { mode, setMode, tempLine, tempRoi, clickAddPoint, commitLine, commitRoi, cancel } = useRegionDrawing(
+    async (p1, p2) => {
+      // Lưu vào store và gọi API backend (merge không xóa roi)
+      const payload = { stopLine: [p1, p2] as any }
+      setCameraRegion(cameraId, payload)
+      await streams.updateCameraRegions(cameraId, payload)
+    },
+    async (pts) => {
+      // Lưu ROI nhưng giữ nguyên stopLine hiện có (backend merge từng phần)
+      const payload = { roi: pts as any }
+      setCameraRegion(cameraId, payload)
+      await streams.updateCameraRegions(cameraId, payload)
     }
-  }, [open])
-
-  const toRelative = useCallback((clientX: number, clientY: number) => {
-    const el = containerRef.current
-    if (!el) return { x: 0, y: 0 }
-    const rect = el.getBoundingClientRect()
-    const x = (clientX - rect.left) / rect.width
-    const y = (clientY - rect.top) / rect.height
-    return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) }
-  }, [])
-
-  const toPixel = useCallback((pt: { x: number; y: number }) => {
-    const el = containerRef.current
-    if (!el) return { x: 0, y: 0 }
-    const rect = el.getBoundingClientRect()
-    return { x: pt.x * rect.width, y: pt.y * rect.height }
-  }, [])
+  )
 
   const onOverlayClick = useCallback((e: React.MouseEvent) => {
     if (mode === 'idle') return
     const rel = toRelative(e.clientX, e.clientY)
-    if (mode === 'draw-line') {
-      if (!tempLine.p1) setTempLine({ p1: rel })
-      else if (!tempLine.p2) setTempLine({ p1: tempLine.p1, p2: rel })
-      else setTempLine({ p1: rel })
-    } else if (mode === 'draw-roi') {
-      setTempRoi((prev) => [...prev, rel])
-    }
-  }, [mode, tempLine, toRelative])
+    clickAddPoint(rel)
+  }, [mode, toRelative, clickAddPoint])
 
-  const commitLine = useCallback(() => {
-    if (tempLine.p1 && tempLine.p2) {
-      setCameraRegion(cameraId, { stopLine: [tempLine.p1, tempLine.p2] })
-      setMode('idle')
-      setTempLine({})
-    }
-  }, [cameraId, setCameraRegion, tempLine])
-
-  const commitRoi = useCallback(() => {
-    if (tempRoi.length >= 3) {
-      setCameraRegion(cameraId, { roi: tempRoi })
-      setMode('idle')
-      setTempRoi([])
-    }
-  }, [cameraId, setCameraRegion, tempRoi])
-
-  const cancelDrawing = useCallback(() => {
-    setMode('idle')
-    setTempLine({})
-    setTempRoi([])
-  }, [])
-
-  // Keyboard shortcuts within modal
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (mode === 'draw-roi') {
-        if (e.key === 'Escape') cancelDrawing()
-        if (e.key === 'Enter') { e.preventDefault(); commitRoi() }
-        if (e.key === 'Backspace') setTempRoi((prev) => prev.slice(0, -1))
-      } else if (mode === 'draw-line') {
-        if (e.key === 'Escape') cancelDrawing()
-        if (e.key === 'Enter') commitLine()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, mode, commitLine, commitRoi, cancelDrawing])
+  // Keyboard shortcuts handled inside useRegionDrawing hook
 
   return (
     <Modal
@@ -124,9 +70,9 @@ export default function RegionEditorModal({
         </div>
 
         <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
-          <div ref={containerRef} style={{ position: 'relative', width: '100%', height: 'auto' }}>
+          <div ref={containerRef} style={{ position: 'relative', width: '100%', aspectRatio: '16/9' }}>
             {imageSrc ? (
-              <img src={imageSrc} alt="snapshot" style={{ width: '100%', height: 'auto', display: 'block', userSelect: 'none' }} />
+              <img src={imageSrc} alt="snapshot" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', userSelect: 'none' }} />
             ) : (
               <div className="camera-stream-inner" style={{ aspectRatio: '16/9' }}>
                 <div className="camera-stream-text">Không có ảnh snapshot</div>
@@ -159,7 +105,7 @@ export default function RegionEditorModal({
                 </Space>
               ) : (
                 <Space size={6}>
-                  <Button size="small" icon={<CloseOutlined />} onClick={cancelDrawing}>Hủy</Button>
+                  <Button size="small" icon={<CloseOutlined />} onClick={cancel}>Hủy</Button>
                   {mode === 'draw-line' ? (
                     <Button type="primary" size="small" icon={<CheckOutlined />} disabled={!tempLine.p1 || !tempLine.p2} onClick={commitLine}>Lưu line</Button>
                   ) : (

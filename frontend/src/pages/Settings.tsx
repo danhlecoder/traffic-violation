@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
-import { Card, Form, InputNumber, Switch, Input, Button, Table, Space, Modal, Divider, Typography, Row, Col } from 'antd'
+import { streams } from '../services/api'
+import { Card, Form, InputNumber, Switch, Input, Button, Table, Space, Modal, Divider, Typography, Row, Col, Upload } from 'antd'
+import { UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 
 export default function Settings() {
@@ -11,7 +13,10 @@ export default function Settings() {
 
   function save() {
     update(local)
-    toast.success('Đã lưu cấu hình')
+    // Đồng bộ danh sách camera lên backend để lưu cùng regions
+    Promise.all(local.cameras.map((c) => streams.upsertCamera({ id: c.id, name: c.name, rtsp: c.rtsp, location: c.location, regions: (useStore.getState().settings.cameraRegions as any)[c.id] }))).then(() => {
+      toast.success('Đã lưu cấu hình')
+    }).catch(() => toast.error('Lưu server thất bại (offline?)'))
   }
 
   function addCamera() {
@@ -27,8 +32,44 @@ export default function Settings() {
       okText: 'Xóa',
       okButtonProps: { danger: true },
       cancelText: 'Hủy',
-      onOk: () => { setLocal({ ...local, cameras: local.cameras.filter((c) => c.id !== id) }); toast.success('Đã xóa camera') },
+      onOk: async () => {
+        setLocal({ ...local, cameras: local.cameras.filter((c) => c.id !== id) })
+        try { await streams.deleteCamera(id) } catch {}
+        toast.success('Đã xóa camera')
+      },
     })
+  }
+
+  // Xuất cấu hình vùng vẽ camera (cameraRegions) ra JSON để backup/chia sẻ
+  function exportRegions() {
+    const data = {
+      cameraRegions: useStore.getState().settings.cameraRegions,
+      exportedAt: new Date().toISOString(),
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'camera-regions.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Nhập cấu hình vùng vẽ từ file JSON và ghi vào settings
+  async function importRegions(file: File) {
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      if (!parsed || typeof parsed !== 'object' || !parsed.cameraRegions) {
+        toast.error('Tệp không hợp lệ')
+        return
+      }
+      update({ cameraRegions: parsed.cameraRegions })
+      setLocal({ ...local, cameraRegions: parsed.cameraRegions })
+      toast.success('Đã nhập vùng vẽ từ file')
+    } catch (e) {
+      toast.error('Không thể đọc tệp JSON')
+    }
   }
 
   return (
@@ -85,7 +126,21 @@ export default function Settings() {
         </Col>
       </Row>
 
-      <Card title="Quản lý Camera" size="small" bodyStyle={{ padding: smallPad }} extra={<Space><Button size="small" onClick={addCamera}>Thêm</Button><Button size="small" type="primary" onClick={save}>Lưu</Button></Space>}>
+      <Card
+        title="Quản lý Camera"
+        size="small"
+        bodyStyle={{ padding: smallPad }}
+        extra={
+          <Space>
+            <Button size="small" icon={<DownloadOutlined />} onClick={exportRegions}>Xuất vùng</Button>
+            <Upload showUploadList={false} accept="application/json" beforeUpload={() => false} onChange={(e) => { const f = e.file as any; if (f?.originFileObj) importRegions(f.originFileObj) }}>
+              <Button size="small" icon={<UploadOutlined />}>Nhập vùng</Button>
+            </Upload>
+            <Button size="small" onClick={addCamera}>Thêm</Button>
+            <Button size="small" type="primary" onClick={save}>Lưu</Button>
+          </Space>
+        }
+      >
         <Table
           size="small"
           bordered

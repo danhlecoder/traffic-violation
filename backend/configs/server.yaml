@@ -1,0 +1,11 @@
+# Cấu hình
+
+database:
+  mongo_camera:
+    host: localhost
+    port: 27017
+    database: traffic
+    username: ""
+    password: ""
+    authSource: admin
+    options: ""

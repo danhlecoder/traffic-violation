@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Row, Col, Space, Select, Button, Grid, Card, Pagination } from 'antd'
 import { useStore, VIOLATION_TYPES, Violation } from '../store/useStore'
+import { streams } from '../services/api'
 import { confirmViolation, skipViolation } from '../services/violations'
 import { sendZalo } from '../services/zalo'
 import ViolationDetailModal from '../components/violations/ViolationDetailModal'
@@ -78,6 +79,28 @@ export default function LiveMonitor() {
     }, 5000)
     return () => clearInterval(interval)
   }, [addViolation, cameras])
+
+  // Khi khởi động trang, cố gắng tải danh sách camera và vùng vẽ từ backend nếu có
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await streams.listCameras()
+        if (list && list.length > 0) {
+          // Merge danh sách camera (không ghi đè khi trùng id nếu đã có cấu hình cục bộ)
+          const cur = useStore.getState().settings
+          const merged = [...cur.cameras]
+          const regionsMap: any = { ...(cur.cameraRegions || {}) }
+          for (const cam of list) {
+            if (!merged.find((c) => c.id === cam.id)) {
+              merged.push({ id: cam.id, name: cam.name, rtsp: cam.rtsp, location: cam.location })
+            }
+            if (cam.regions) regionsMap[cam.id] = cam.regions
+          }
+          updateSettings({ cameras: merged, cameraRegions: regionsMap })
+        }
+      } catch {}
+    })()
+  }, [updateSettings])
 
   const [filter, setFilter] = useState<'Tất cả' | 'Vượt đèn đỏ' | 'Quá tốc độ' | 'Không đội mũ'>('Tất cả')
   const pendingList = useMemo(() => violations.filter(v => v.status === 'Mới').slice(0, 50), [violations])
