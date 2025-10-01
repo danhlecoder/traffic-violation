@@ -33,8 +33,20 @@ export default function Settings() {
       okButtonProps: { danger: true },
       cancelText: 'Hủy',
       onOk: async () => {
-        setLocal({ ...local, cameras: local.cameras.filter((c) => c.id !== id) })
-        try { await streams.deleteCamera(id) } catch {}
+        try {
+          // Xóa dưới DB ngay lập tức
+          await streams.deleteCamera(id)
+        } catch (e) {
+          toast.error('Xóa trên server thất bại')
+          return
+        }
+
+        // Cập nhật store (persist vào localStorage) và local state đồng bộ
+        const nextCams = local.cameras.filter((c) => c.id !== id)
+        const nextRegions = { ...(useStore.getState().settings.cameraRegions || {}) } as any
+        if (nextRegions[id]) delete nextRegions[id]
+        update({ cameras: nextCams, cameraRegions: nextRegions })
+        setLocal({ ...local, cameras: nextCams, cameraRegions: nextRegions })
         toast.success('Đã xóa camera')
       },
     })

@@ -11,6 +11,7 @@ services:
     volumes:
       - ./backend:/app/backend:rw
       - ./requirements.txt:/app/requirements.txt:ro
+      - ./logs:/app/logs:rw
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped

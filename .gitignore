@@ -204,7 +204,9 @@ config.json
 config.py
 chat_log.json
 default_config.yaml
-logs
+logs/
+logs/*.log
+logs/backend.log*
 cache/
 
 recognized_faces/
