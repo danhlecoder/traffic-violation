@@ -174,8 +174,11 @@ export default function LiveMonitor() {
       cams = showAll ? cameras : cameras
     }
 
-    const pages = Math.max(1, Math.ceil(cams.length / CAMERAS_PER_PAGE))
-    return { allCams: cams, totalPages: pages }
+    // Dedupe by id to avoid duplicate tiles due to transient UI states
+    const uniq = Array.from(new Map(cams.map((c) => [c.id, c])).values())
+
+    const pages = Math.max(1, Math.ceil(uniq.length / CAMERAS_PER_PAGE))
+    return { allCams: uniq, totalPages: pages }
   }, [cameras, selectedCamIds, showAll, focusedCamId])
 
   const displayCams = useMemo(() => {
