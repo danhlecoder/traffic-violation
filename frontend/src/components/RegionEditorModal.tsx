@@ -1,11 +1,12 @@
-import { Modal, Button, Space, Tooltip, Typography } from 'antd'
-import { useCallback, useRef } from 'react'
+import { Modal, Button, Space, Tooltip, Typography, message } from 'antd'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { LineOutlined, HighlightOutlined, ClearOutlined, CheckOutlined, CloseOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useStore } from '../store/useStore'
 import RegionOverlay from './RegionOverlay'
 import { useElementScaler } from '../hooks/useElementScaler'
 import { useRegionDrawing } from '../hooks/useRegionDrawing'
 import { streams } from '../services/api'
+import * as streamSvc from '../services/streams'
 
 const { Text } = Typography
 
@@ -15,11 +16,13 @@ export default function RegionEditorModal({
   open,
   cameraId,
   imageSrc,
+  rtsp,
   onClose,
 }: {
   open: boolean
   cameraId: string
   imageSrc?: string
+  rtsp?: string
   onClose: () => void
 }) {
   const regions = useStore((s) => s.settings.cameraRegions)
@@ -42,6 +45,106 @@ export default function RegionEditorModal({
       await streams.updateCameraRegions(cameraId, payload)
     }
   )
+
+  const [loadingDetect, setLoadingDetect] = useState(false)
+  const [loadingRegions, setLoadingRegions] = useState(false)
+
+  // Khi modal mở, nạp ngay regions từ backend để tránh lệ thuộc store cũ
+  useEffect(() => {
+    if (!open || !cameraId) return
+    let aborted = false
+    ;(async () => {
+      setLoadingRegions(true)
+      try {
+        const cam = await streamSvc.getCamera(cameraId)
+        if (!aborted && cam?.regions) {
+          setCameraRegion(cameraId, cam.regions as any)
+        }
+      } catch {}
+      finally {
+        if (!aborted) setLoadingRegions(false)
+      }
+    })()
+    return () => { aborted = true }
+  }, [open, cameraId, setCameraRegion])
+
+  const runAutoDetect = useCallback(async () => {
+    if (!rtsp) {
+      message.warning('Chưa cấu hình RTSP cho camera này')
+      return
+    }
+    if (!imageSrc) {
+      message.warning('Chưa có ảnh snapshot để phát hiện. Hãy chờ ảnh xuất hiện hoặc thử chụp lại.')
+      return
+    }
+    setLoadingDetect(true)
+    try {
+      // Ưu tiên dùng ngay ảnh đang hiển thị (nếu có) để detect
+      let resp: Response | undefined
+      let dataUrl: string | null = null
+      if (imageSrc) {
+        if (imageSrc.startsWith('data:image/')) {
+          dataUrl = imageSrc
+        } else if (imageSrc.startsWith('blob:')) {
+          try {
+            const blob = await fetch(imageSrc).then(r => r.blob())
+            dataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onloadend = () => resolve(reader.result as string)
+              reader.onerror = reject
+              reader.readAsDataURL(blob)
+            })
+          } catch {}
+        }
+      }
+
+      // Dùng CHÍNH ảnh đang hiển thị: chuyển blob -> data URL nếu cần và POST lên /api/detect/stopline
+      let dataUrlLocal: string | null = null
+      if (imageSrc) {
+        if (imageSrc.startsWith('data:image/')) {
+          dataUrlLocal = imageSrc
+        } else if (imageSrc.startsWith('blob:')) {
+          try {
+            const blob = await fetch(imageSrc).then(r => r.blob())
+            dataUrlLocal = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onloadend = () => resolve(reader.result as string)
+              reader.onerror = reject
+              reader.readAsDataURL(blob)
+            })
+          } catch {}
+        }
+      }
+
+      if (!dataUrlLocal) throw new Error('Không có ảnh để detect')
+
+      resp = await fetch(`${streamSvc.getApiBase()}/api/detect/stopline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrlLocal }),
+      })
+      if (!resp) throw new Error('no response')
+      if (!resp.ok) throw new Error(`detect failed: ${resp.status}`)
+      const data = await resp.json()
+      const line = data?.stopLine
+      if (line && line.length === 2) {
+        const payload = { stopLine: line as any }
+        setCameraRegion(cameraId, payload)
+        await streams.updateCameraRegions(cameraId, payload)
+        message.success('Đã phát hiện và lưu vạch dừng')
+        if (data?.image) {
+          // Cập nhật luôn ảnh nếu server trả về
+          try { setTimeout(() => setLoadingDetect(false), 0) } catch {}
+        }
+      } else {
+        message.info('Không phát hiện được vạch dừng')
+      }
+    } catch (e: any) {
+      message.error(`Lỗi phát hiện: ${e?.message || e}`)
+    } finally {
+      setLoadingDetect(false)
+    }
+  }, [rtsp, cameraId, setCameraRegion, imageSrc])
 
   const onOverlayClick = useCallback((e: React.MouseEvent) => {
     if (mode === 'idle') return
@@ -91,6 +194,9 @@ export default function RegionEditorModal({
                   </Tooltip>
                   <Tooltip title="Vẽ vùng đèn giao thông (đa giác)">
                     <Button size="small" icon={<HighlightOutlined />} onClick={() => setMode('draw-roi')}>ROI</Button>
+                  </Tooltip>
+                  <Tooltip title="Phát hiện vạch dừng tự động">
+                    <Button size="small" loading={loadingDetect} disabled={!imageSrc} onClick={runAutoDetect}>Line tự động</Button>
                   </Tooltip>
                   {cameraRegion.stopLine && (
                     <Tooltip title="Xóa vạch dừng">

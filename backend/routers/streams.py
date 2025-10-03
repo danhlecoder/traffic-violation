@@ -1,9 +1,14 @@
 from typing import Optional
 
 from fastapi import APIRouter, Query, HTTPException
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
-from ..src.rtsp_stream.streamer import generate_mjpeg, open_capture
+from ..src.rtsp_stream.streamer import generate_mjpeg
+from ..src.utils.detec_line import detect_stop_line_normalized, center_crop_to_16_9
+from ..src.utils.logger import app_logger as log
+import base64
+import numpy as np
 import cv2
 
 
@@ -29,32 +34,66 @@ def stream(
     return StreamingResponse(generator, media_type="multipart/x-mixed-replace; boundary=frame")
 
 
-@router.get("/api/snapshot")
-def snapshot(
-    rtsp: Optional[str] = Query(None, alias="src"),
-    quality: int = Query(85, ge=10, le=95),
-):
-    """
-    Return a single JPEG frame from the source for annotation snapshot.
-    """
-    if not rtsp:
-        raise HTTPException(status_code=400, detail="Missing 'src' query (RTSP/URL)")
+## Snapshot endpoint đã loại bỏ theo yêu cầu
 
-    cap = open_capture(rtsp, reconnect=False, timeout_sec=5)
-    if cap is None:
-        raise HTTPException(status_code=503, detail="Cannot open source")
-    try:
-        ok, frame = cap.read()
-        if not ok or frame is None:
-            raise HTTPException(status_code=502, detail="Failed to read frame")
-        ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
-        if not ok:
-            raise HTTPException(status_code=500, detail="Encode JPEG failed")
-        jpg: bytes = buf.tobytes()
-        return Response(content=jpg, media_type="image/jpeg")
-    finally:
+
+class DetectImagePayload(BaseModel):
+    image: str  # data URL hoặc base64 ảnh JPEG/PNG
+
+
+@router.post("/api/detect/stopline")
+def detect_stopline_from_image(payload: DetectImagePayload):
+    """
+    Nhận ảnh (data URL hoặc base64) từ frontend và chạy phát hiện vạch dừng.
+    Trả về 2 điểm đã chuẩn hóa [0..1] nếu tìm thấy.
+    """
+    data = payload.image.strip()
+    # Hỗ trợ data URL: data:image/jpeg;base64,....
+    if data.startswith("data:"):
         try:
-            cap.release()
+            data = data.split(",", 1)[1]
+        except Exception:
+            raise HTTPException(status_code=400, detail="Data URL không hợp lệ")
+
+    try:
+        jpg_bytes = base64.b64decode(data, validate=False)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Base64 ảnh không hợp lệ")
+
+    buf = np.frombuffer(jpg_bytes, dtype=np.uint8)
+    frame = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    if frame is None:
+        raise HTTPException(status_code=400, detail="Không giải mã được ảnh")
+
+    # Đồng bộ với luồng snapshot/detect: crop 16:9 và resize chuẩn
+    frame = center_crop_to_16_9(frame)
+    try:
+        frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_AREA)
+    except Exception:
+        pass
+
+    # Downscale cho nhánh detect để tăng tốc
+    det_in = frame
+    try:
+        det_in = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+    except Exception:
+        det_in = frame
+
+    try:
+        result = detect_stop_line_normalized(det_in)
+    except Exception:
+        try:
+            log.exception("Lỗi phát hiện vạch dừng từ ảnh")
         except Exception:
             pass
+        result = None
+
+    payload_out = {"stopLine": None}
+    if result:
+        (x1, y1), (x2, y2) = result
+        payload_out["stopLine"] = [
+            {"x": float(x1), "y": float(y1)},
+            {"x": float(x2), "y": float(y2)},
+        ]
+    return payload_out
 

@@ -1,7 +1,8 @@
 import { Badge, Typography, Tag, Button, Tooltip } from 'antd'
-import { useMemo, useState, useCallback, useEffect } from 'react'
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { EditOutlined } from '@ant-design/icons'
-import { buildStreamUrl, fetchSnapshotBlob } from '../services/streams'
+import { buildStreamUrl } from '../services/streams'
+import { streams } from '../services/api'
 import RegionEditorModal from './RegionEditorModal'
 import RegionOverlay from './RegionOverlay'
 import { useStore } from '../store/useStore'
@@ -32,45 +33,100 @@ export default function CameraTile({
   const { ref: containerRef, toPixel } = useElementScaler<HTMLDivElement>()
   const [editorOpen, setEditorOpen] = useState(false)
   const [snapshot, setSnapshot] = useState<string | undefined>(undefined)
+  const autoDetectRanRef = useRef(false)
+  const autoDetectingRef = useRef(false)
   const regions = useStore((s) => s.settings.cameraRegions)
+  const setCameraRegion = useStore((s) => s.setCameraRegion)
   const cameraRegion = regions[cameraId] || {}
 
   const streamSrc = useMemo(() => (rtsp ? buildStreamUrl(rtsp) : undefined), [rtsp])
 
+  // Tự động chụp khung đầu và detect khi stream sẵn sàng (chỉ khi chưa có line)
+  const tryAutoDetectFromStream = useCallback(async (): Promise<boolean> => {
+    if (!rtsp || autoDetectRanRef.current || autoDetectingRef.current) return false
+    if (cameraRegion && (cameraRegion as any).stopLine) return false
+    const el = containerRef.current
+    const img = el?.querySelector('img') as HTMLImageElement | null
+    if (!img || !(img.naturalWidth || img.width)) return false
+    try {
+      autoDetectingRef.current = true
+      const canvas = document.createElement('canvas')
+      const w = img.naturalWidth || img.width
+      const h = img.naturalHeight || img.height
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('No canvas context')
+      ctx.drawImage(img, 0, 0, w, h)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+      const apiBase = (import.meta as any)?.env?.VITE_API_BASE || `${window.location.protocol}//${window.location.hostname}:8000`
+      const resp = await fetch(`${apiBase}/api/detect/stopline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl }),
+      })
+      if (!resp.ok) throw new Error('auto detect failed')
+      const data = await resp.json()
+      const line = data?.stopLine
+      if (line && line.length === 2) {
+        const payload = { stopLine: line as any }
+        setCameraRegion(cameraId, payload)
+        try { await streams.updateCameraRegions(cameraId, payload) } catch {}
+        autoDetectRanRef.current = true
+        return true
+      }
+    } catch {
+      // ignore errors silently
+    } finally {
+      autoDetectingRef.current = false
+    }
+    return false
+  }, [rtsp, cameraRegion, cameraId, setCameraRegion])
+
   // Capture a snapshot via backend endpoint; fallback to canvas if needed
   const takeSnapshot = useCallback(async () => {
     if (!rtsp) return
-    // Mở modal ngay lập tức, ảnh snapshot sẽ tải bất đồng bộ
-    setEditorOpen(true)
-    try {
-      const blob = await fetchSnapshotBlob(rtsp)
-      const objectUrl = URL.createObjectURL(blob)
-      setSnapshot(objectUrl)
-      return
-    } catch (e) {
-      // Fallback to canvas from the <img> element
-      const el = containerRef.current
-      const img = el?.querySelector('img') as HTMLImageElement | null
-      if (img) {
-        try {
-          const canvas = document.createElement('canvas')
-          const w = img.naturalWidth || img.width
-          const h = img.naturalHeight || img.height
-          canvas.width = w
-          canvas.height = h
-          const ctx = canvas.getContext('2d')
-          if (!ctx) throw new Error('No canvas context')
-          ctx.drawImage(img, 0, 0, w, h)
-          const data = canvas.toDataURL('image/jpeg', 0.92)
-          setSnapshot(data)
-        } catch {
-          setSnapshot(undefined)
-        }
-      } else {
-        setSnapshot(undefined)
+    // Xóa ảnh cũ để tránh hiển thị ảnh trước đó khi mở modal
+    setSnapshot(undefined)
+    // Ưu tiên chụp trực tiếp từ khung stream đang hiển thị (nhanh, 0ms)
+    const el = containerRef.current
+    const img = el?.querySelector('img') as HTMLImageElement | null
+    if (img && (img.naturalWidth || img.width) > 0) {
+      try {
+        const canvas = document.createElement('canvas')
+        const w = img.naturalWidth || img.width
+        const h = img.naturalHeight || img.height
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('No canvas context')
+        ctx.drawImage(img, 0, 0, w, h)
+        const data = canvas.toDataURL('image/jpeg', 0.92)
+        setSnapshot(data)
+        // Mở modal sau khi đã có ảnh để tránh race-condition
+        setEditorOpen(true)
+        return
+      } catch {
+        // ignore and fallback to backend fetch
       }
     }
+
+    // Nếu không thể chụp từ stream, vẫn mở modal (không có ảnh) để người dùng biết
+    setEditorOpen(true)
   }, [rtsp])
+
+  // Gắn sự kiện khi stream sẵn sàng để thử auto-detect một lần
+  const onStreamLoad = useCallback(() => {
+    // Thử ngay và nếu chưa thành công, thử lại trong vài nhịp (do MJPEG có thể chưa ổn định)
+    let attempts = 0
+    const maxAttempts = 10
+    const tick = async () => {
+      attempts += 1
+      const ok = await tryAutoDetectFromStream()
+      if (!ok && attempts < maxAttempts) setTimeout(tick, 200)
+    }
+    void tick()
+  }, [tryAutoDetectFromStream])
 
   // Revoke blob URL when modal closes or component unmounts
   useEffect(() => {
@@ -107,6 +163,7 @@ export default function CameraTile({
             src={streamSrc}
             alt={name}
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            onLoad={onStreamLoad}
           />
         ) : (
           <div className="camera-stream-inner">
@@ -157,7 +214,7 @@ export default function CameraTile({
         </div>
       </div>
     </div>
-    <RegionEditorModal open={editorOpen} cameraId={cameraId} imageSrc={snapshot} onClose={() => setEditorOpen(false)} />
+    <RegionEditorModal open={editorOpen} cameraId={cameraId} imageSrc={snapshot} onClose={() => setEditorOpen(false)} rtsp={rtsp} />
     </>
   )
 }

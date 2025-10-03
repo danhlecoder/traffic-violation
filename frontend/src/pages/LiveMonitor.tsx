@@ -85,19 +85,13 @@ export default function LiveMonitor() {
     (async () => {
       try {
         const list = await streams.listCameras()
-        if (list && list.length > 0) {
-          // Merge danh sách camera (không ghi đè khi trùng id nếu đã có cấu hình cục bộ)
-          const cur = useStore.getState().settings
-          const merged = [...cur.cameras]
-          const regionsMap: any = { ...(cur.cameraRegions || {}) }
-          for (const cam of list) {
-            if (!merged.find((c) => c.id === cam.id)) {
-              merged.push({ id: cam.id, name: cam.name, rtsp: cam.rtsp, location: cam.location })
-            }
-            if (cam.regions) regionsMap[cam.id] = cam.regions
-          }
-          updateSettings({ cameras: merged, cameraRegions: regionsMap })
+        // Thay vì merge, đồng bộ tuyệt đối theo server để tránh rác khi đã xóa DB
+        const cams = (list || []).map((c) => ({ id: c.id, name: c.name, rtsp: c.rtsp, location: c.location }))
+        const regionsMap: any = {}
+        for (const cam of list || []) {
+          if (cam.regions) regionsMap[cam.id] = cam.regions
         }
+        updateSettings({ cameras: cams, cameraRegions: regionsMap })
       } catch {}
     })()
   }, [updateSettings])

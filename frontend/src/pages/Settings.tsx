@@ -12,6 +12,13 @@ export default function Settings() {
   const smallPad = 12
 
   function save() {
+    // Kiểm tra trùng ID trước khi lưu
+    const ids = local.cameras.map((c) => c.id)
+    const dup = ids.find((id, idx) => ids.indexOf(id) !== idx)
+    if (dup) {
+      toast.error(`Trùng ID camera: ${dup}. Vui lòng đổi ID trước khi lưu.`)
+      return
+    }
     update(local)
     // Đồng bộ danh sách camera lên backend để lưu cùng regions
     Promise.all(local.cameras.map((c) => streams.upsertCamera({ id: c.id, name: c.name, rtsp: c.rtsp, location: c.location, regions: (useStore.getState().settings.cameraRegions as any)[c.id] }))).then(() => {
@@ -20,7 +27,18 @@ export default function Settings() {
   }
 
   function addCamera() {
-    const newId = `cam-${String(local.cameras.length + 1).padStart(2, '0')}`
+    // Sinh ID tiếp theo không trùng: cam-01, cam-02, ... (lấy số nhỏ nhất chưa dùng)
+    const used = new Set<number>()
+    for (const c of local.cameras) {
+      const m = /^cam-(\d+)$/.exec(c.id || '')
+      if (m) {
+        const n = parseInt(m[1], 10)
+        if (!Number.isNaN(n)) used.add(n)
+      }
+    }
+    let next = 1
+    while (used.has(next)) next++
+    const newId = `cam-${String(next).padStart(2, '0')}`
     setLocal({ ...local, cameras: [...local.cameras, { id: newId, name: 'Camera mới', rtsp: '', location: '' }] })
     toast.success('Đã thêm camera')
   }

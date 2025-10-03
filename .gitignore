@@ -225,3 +225,4 @@ csv
 test-cam.py
 face_recognition.log
 
+.cursor/

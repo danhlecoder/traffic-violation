@@ -10,25 +10,29 @@ export function buildStreamUrl(rtsp: string): string {
   return `${getApiBase()}/api/stream?src=${encodeURIComponent(rtsp)}`
 }
 
-export function buildSnapshotUrl(rtsp: string): string {
-  return `${getApiBase()}/api/snapshot?src=${encodeURIComponent(rtsp)}`
-}
+// Snapshot API đã loại bỏ; dùng ảnh đang hiển thị hoặc POST /api/detect/stopline
 
-export async function fetchSnapshotBlob(rtsp: string): Promise<Blob> {
-  const url = buildSnapshotUrl(rtsp)
-  const resp = await fetch(url)
-  if (!resp.ok) throw new Error(`snapshot failed: ${resp.status}`)
-  return await resp.blob()
-}
-
-// API quản lý camera và vùng vẽ
 export type Point = { x: number; y: number }
 export type CameraRegionDto = { stopLine?: [Point, Point] | null; roi?: Point[] | null }
 export type CameraDto = { id: string; name: string; rtsp: string; location: string; regions?: CameraRegionDto }
 
+export async function detectStopLine(rtsp: string): Promise<[Point, Point] | null> {
+  // Deprecated: use POST /api/detect/stopline with displayed image or
+  // GET /api/snapshot?detect=1 when needed directly.
+  throw new Error('detectStopLine is deprecated')
+}
+
+// API quản lý camera và vùng vẽ
+
 export async function listCameras(): Promise<CameraDto[]> {
   const resp = await fetch(`${getApiBase()}/api/cameras`)
   if (!resp.ok) throw new Error('load cameras failed')
+  return await resp.json()
+}
+
+export async function getCamera(id: string): Promise<CameraDto> {
+  const resp = await fetch(`${getApiBase()}/api/cameras/${encodeURIComponent(id)}`)
+  if (!resp.ok) throw new Error('get camera failed')
   return await resp.json()
 }
 
@@ -44,7 +48,8 @@ export async function updateCameraRegions(id: string, regions: CameraRegionDto):
 
 export async function deleteCamera(id: string): Promise<void> {
   const resp = await fetch(`${getApiBase()}/api/cameras/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  if (!resp.ok) throw new Error('delete camera failed')
+  // Nếu server trả 404 (đã không tồn tại) thì vẫn coi như xóa thành công
+  if (!resp.ok && resp.status !== 404) throw new Error('delete camera failed')
 }
 
 
