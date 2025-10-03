@@ -57,42 +57,24 @@ def center_crop_to_16_9(frame_bgr: np.ndarray) -> np.ndarray:
 
 def detect_stop_line_points(frame_bgr: np.ndarray) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
     """
-    Phát hiện vạch dừng theo từng bước:
-    1) Grayscale
-    2) Gaussian blur nhẹ
-    3) Canny edge
-    4) HoughLinesP
-    5) Lọc đường gần ngang, gần tâm theo trục x và gần đáy ảnh
-    6) Kéo dài đoạn thẳng tới biên ảnh và trả về 2 điểm (pixel)
+    Phát hiện vạch dừng theo đúng quy trình trong notebook:
+    1) Grayscale -> GaussianBlur(3x3) -> Canny(50,50)
+    2) HoughLinesP để tìm các đoạn thẳng
+    3) Chọn đoạn gần như nằm ngang (góc < 10°), nằm gần tâm theo trục x và ở gần đáy ảnh
+       (ưu tiên đoạn có tung độ trung bình lớn nhất), sau đó kéo dài đoạn này ra hai biên khung.
+    Trả về: 2 điểm (pixel) của đoạn đã kéo dài, hoặc None nếu không tìm thấy.
     """
     if frame_bgr is None or frame_bgr.size == 0:
         return None
 
     img_h, img_w = frame_bgr.shape[:2]
 
-    # 1) Grayscale
+    # 1) Grayscale + blur + Canny
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-    # 2) Gaussian blur nhẹ (kernel lẻ 3x3)
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    # 3) Canny (50, 50) như notebook
     edges = cv2.Canny(blur, 50, 50)
 
-    # Giới hạn ROI: đáy khung và gần trung tâm ngang để giảm nhiễu 2 bên
-    roi_mask = np.zeros_like(edges, dtype=np.uint8)
-    y0 = int(img_h * 0.6)
-    x_left = int(img_w * 0.15)
-    x_right = int(img_w * 0.85)
-    roi_mask[y0:img_h, x_left:x_right] = 255
-    edges = cv2.bitwise_and(edges, roi_mask)
-
-    # Kết nối vạch đứt bằng morphology đóng theo phương ngang
-    k_w = max(9, int(img_w * 0.04))
-    if k_w % 2 == 0:
-        k_w += 1
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k_w, 1))
-    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=1)
-
-    # 4) HoughLinesP (tham số theo tỉ lệ kích thước để ổn định giữa các nguồn)
+    # 2) HoughLinesP
     min_len = max(60, int(img_w * 0.25))
     max_gap = max(10, int(img_w * 0.02))
     lines = cv2.HoughLinesP(
@@ -106,50 +88,27 @@ def detect_stop_line_points(frame_bgr: np.ndarray) -> Optional[Tuple[Tuple[float
     if lines is None or len(lines) == 0:
         return None
 
-    # 5) Lọc: gần ngang (góc < 10°), gần tâm theo x, và gần đáy (y > 60% h)
-    # Gom các đoạn thẳng ứng viên rồi fit tuyến tính có trọng số (độ dài)
-    best_line = None
-    best_y = -1.0
-    xs: list[float] = []
-    ys: list[float] = []
-    ws: list[float] = []
+    # 3) Chọn đoạn tốt nhất
+    best_line: Optional[Tuple[float, float, float, float]] = None
+    best_avg_y = -1.0
     for line in lines:
         x1, y1, x2, y2 = [float(v) for v in line[0]]
         dx = x2 - x1
         dy = y2 - y1
-        length = math.hypot(dx, dy)
-        if length < min_len * 0.5:
-            continue
         angle = abs(math.degrees(math.atan2(dy, dx)))
         if angle >= 10.0:
             continue
         avg_y = (y1 + y2) / 2.0
         avg_x = (x1 + x2) / 2.0
         if abs(avg_x - (img_w / 2.0)) < (img_w * 0.35) and avg_y > (img_h * 0.6):
-            # Lưu lại tuyến tính tốt nhất để fallback
-            if avg_y > best_y:
-                best_y = avg_y
+            if avg_y > best_avg_y:
+                best_avg_y = avg_y
                 best_line = (x1, y1, x2, y2)
-            # Thu thập điểm cho hồi quy
-            xs += [x1, x2]
-            ys += [y1, y2]
-            ws += [length, length]
 
-    if len(xs) >= 2:
-        try:
-            coeffs = np.polyfit(np.asarray(xs), np.asarray(ys), 1, w=np.asarray(ws))
-            a, b = float(coeffs[0]), float(coeffs[1])  # y = a*x + b
-            y_left = a * 0.0 + b
-            y_right = a * (img_w - 1.0) + b
-            p1 = (0.0, float(np.clip(y_left, 0, img_h - 1)))
-            p2 = (float(img_w - 1), float(np.clip(y_right, 0, img_h - 1)))
-            return p1, p2
-        except Exception:
-            pass
-
-    # Fallback: dùng đoạn thẳng tốt nhất và kéo dài ra biên
     if best_line is None:
         return None
+
+    # Kéo dài đoạn thẳng ra biên và trả về 2 điểm pixel
     ex1, ey1, ex2, ey2 = _extend_line_to_frame(*best_line, img_w, img_h)
     return (ex1, ey1), (ex2, ey2)
 
