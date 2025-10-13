@@ -1,2 +1,0 @@
-"""RTSP streaming utilities."""
-
