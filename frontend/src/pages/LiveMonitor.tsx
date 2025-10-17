@@ -56,6 +56,9 @@ export default function LiveMonitor() {
   const [selectedCamIds, setSelectedCamIds] = useState<string[]>(settings.monitorSelectedCamIds)
   const [focusedCamId, setFocusedCamId] = useState<string | null>(settings.monitorFocusedCamId)
   const [currentPage, setCurrentPage] = useState(settings.monitorPage)
+  
+  // State lưu vehicle density cho mỗi camera
+  const [vehicleDensities, setVehicleDensities] = useState<Record<string, number>>({})
 
   // Lưu trạng thái UI khi thay đổi
   useEffect(() => {
@@ -95,6 +98,28 @@ export default function LiveMonitor() {
       } catch {}
     })()
   }, [updateSettings])
+
+  // Poll vehicle density từ backend mỗi 2 giây
+  useEffect(() => {
+    if (!cameras || cameras.length === 0) return
+    
+    const fetchDensities = async () => {
+      const densities: Record<string, number> = {}
+      for (const cam of cameras) {
+        try {
+          const info = await streams.getCameraDensity(cam.rtsp)
+          densities[cam.id] = info.count
+        } catch {
+          densities[cam.id] = 0
+        }
+      }
+      setVehicleDensities(densities)
+    }
+    
+    fetchDensities() // Gọi ngay lần đầu
+    const interval = setInterval(fetchDensities, 2000) // Poll mỗi 2 giây
+    return () => clearInterval(interval)
+  }, [cameras])
 
   const [filter, setFilter] = useState<'Tất cả' | 'Vượt đèn đỏ' | 'Quá tốc độ' | 'Không đội mũ'>('Tất cả')
   const pendingList = useMemo(() => violations.filter(v => v.status === 'Mới').slice(0, 50), [violations])
@@ -229,7 +254,7 @@ export default function LiveMonitor() {
                       name={cam.name}
                       location={cam.location}
                       rtsp={cam.rtsp}
-                      vehicleDensity={Math.floor(Math.random() * 25)} // Demo data - thay bằng data thật sau
+                      vehicleDensity={vehicleDensities[cam.id] ?? 0}
                       onDoubleClick={() => {
                         setFocusedCamId((prev) => (prev === cam.id ? null : cam.id))
                         setCurrentPage(0) // Reset về trang đầu khi focus/unfocus

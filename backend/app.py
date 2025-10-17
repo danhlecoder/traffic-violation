@@ -1,42 +1,49 @@
-import os
+"""
+Traffic Violation Detection System - Backend API
+"""
+
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+
+from .api.streams import router as streams_router
+from .api.cameras import router as cameras_router
+from .api.density import router as density_router
+from .core.config import settings
+from .core.startup import lifespan
+from .core.middleware import setup_cors
 
 
-from .routers import streams_router, cameras_router
-from .src.services.db import init_indexes
-
-
-app = FastAPI(title="Traffic Violation Backend", version="0.1.0")
-
-# Allow frontend to access API in dev/local setups
-_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
-_allow_all = _origins_env.strip() == "*"
-_origins = ["*"] if _allow_all else [o.strip() for o in _origins_env.split(",") if o.strip()]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_origins,
-    allow_credentials=False if _allow_all else True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="Traffic Violation Detection System",
+    description="Backend API - Traffic violation detection using YOLO",
+    version="1.0.0",
+    lifespan=lifespan
 )
+
+setup_cors(app)
 
 
 @app.get("/api/health")
-def health():
-    return {"status": "ok"}
+def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "service": "Traffic Violation Detection"
+    }
 
 
-app.include_router(streams_router)
-app.include_router(cameras_router)
+# Register routers
+app.include_router(streams_router, tags=["Streaming"])
+app.include_router(cameras_router, tags=["Cameras"])
+app.include_router(density_router, tags=["Density"])
 
 
 if __name__ == "__main__":
     import uvicorn
-
-    # Khởi tạo index MongoDB trước khi chạy (chỉ khi chạy trực tiếp)
-    try:
-        init_indexes()
-    except Exception:
-        pass
-    uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "backend.app:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=True,
+        log_level=settings.LOG_LEVEL.lower()
+    )

@@ -1,0 +1,29 @@
+# Static Configuration - Tham số tĩnh ít thay đổi
+
+# Server
+server:
+  host: "0.0.0.0"
+  port: 8000
+  allowed_origins: "*"
+
+# Logging
+logging:
+  level: INFO
+  file: /app/logs/backend.log
+  max_bytes: 10485760
+  backup_count: 5
+
+# YOLO Model
+yolo:
+  model_path: /app/backend/model/best.pt
+  device: cpu
+
+# Database
+database:
+  mongo_camera:
+    host: mongo
+    port: 27017
+    database: traffic
+    username: ""
+    password: ""
+    authSource: admin

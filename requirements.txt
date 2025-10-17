@@ -1,7 +1,20 @@
+# === WEB FRAMEWORK ===
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
-opencv-python-headless == 4.12.0.88
+pydantic==2.10.6
+
+# === COMPUTER VISION ===
+opencv-python-headless==4.12.0.88
 numpy==2.2.6
+
+# === YOLO DETECTION ===
+ultralytics==8.3.62
+torch>=2.0.0
+torchvision>=0.15.0
+
+# === DATABASE ===
 pymongo==4.9.2
+
+# === UTILITIES ===
 python-dotenv==1.0.1
 PyYAML==6.0.2
