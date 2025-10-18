@@ -1,0 +1,1 @@
+sudo rm -f -- "/home/phucdanh/AI DoAn Vision/traffic-violation/logs/backend.log"

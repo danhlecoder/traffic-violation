@@ -64,7 +64,7 @@ interface State {
   /** Merge/update a camera's region config */
   setCameraRegion: (cameraId: string, patch: Partial<CameraRegion>) => void
   /** Clear a camera region (target part or all) */
-  clearCameraRegion: (cameraId: string, target?: 'stopLine' | 'roi' | 'all') => void
+  clearCameraRegion: (cameraId: string, target?: 'stopLine' | 'lineB' | 'roi' | 'all') => void
 }
 
 // Ghi chú: cấu hình mặc định cho ứng dụng (sẽ được merge với cấu hình đã lưu trong localStorage)
@@ -142,6 +142,7 @@ export const useStore = create<State>((set) => ({
       if (prev) {
         const updated: CameraRegion = { ...prev }
         if (target === 'stopLine') delete (updated as any).stopLine
+        if (target === 'lineB') delete (updated as any).lineB
         if (target === 'roi') delete (updated as any).roi
         map[cameraId] = updated
       }

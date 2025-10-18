@@ -16,7 +16,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..services.streaming import generate_mjpeg
-from ..services.detect_line import detect_stop_line_normalized, center_crop_to_16_9
+from ..services.detect_line import detect_stop_line_with_fallback, calculate_lineB_from_stopline, calculate_roi_from_lineB, center_crop_to_16_9
+from ..services.database import get_db
 from ..utils.logger import app_logger as logger
 
 
@@ -55,11 +56,23 @@ def stream(
     try:
         logger.info(f"Bắt đầu stream từ: {rtsp} (FPS={fps}, Quality={quality}, Detection={detection})")
 
+        # Lấy ROI từ database (nếu có)
+        roi = None
+        try:
+            db = get_db()
+            camera_doc = db.cameras.find_one({'rtsp': rtsp})
+            if camera_doc and camera_doc.get('regions') and camera_doc['regions'].get('roi'):
+                roi = camera_doc['regions']['roi']
+                logger.info(f"Đã load ROI cho camera (RTSP: {rtsp}): {len(roi)} điểm")
+        except Exception as e:
+            logger.warning(f"Không thể load ROI từ DB: {e}")
+
         generator = generate_mjpeg(
             src=rtsp,
             fps=fps,
             jpeg_quality=quality,
-            enable_detection=detection
+            enable_detection=detection,
+            roi=roi
         )
 
         return StreamingResponse(
@@ -145,23 +158,47 @@ def detect_stopline_from_image(payload: DetectImagePayload):
         except Exception:
             det_frame = frame
 
-        # Chạy detection
+        # Chạy detection với logic fallback (kiểm tra traffic light trước)
         try:
-            result = detect_stop_line_normalized(det_frame)
+            stopline_result = detect_stop_line_with_fallback(det_frame)
         except Exception as e:
             logger.exception(f"Lỗi khi phát hiện vạch dừng: {e}")
-            result = None
+            stopline_result = None
 
         # Trả về kết quả
-        response = {"stopLine": None}
+        response = {"stopLine": None, "lineB": None, "roi": None}
 
-        if result:
-            (x1, y1), (x2, y2) = result
+        if stopline_result:
+            (x1, y1), (x2, y2) = stopline_result
             response["stopLine"] = [
                 {"x": float(x1), "y": float(y1)},
                 {"x": float(x2), "y": float(y2)},
             ]
             logger.info(f"✓ Phát hiện vạch dừng: {response['stopLine']}")
+
+            # Tính lineB từ stopLine (đọc từ env hoặc mặc định 64px)
+            try:
+                import os
+                offset_px = int(os.getenv('LINE_B_OFFSET_PX'))
+                h, w = det_frame.shape[:2]
+                lineB_result = calculate_lineB_from_stopline(stopline_result, h, offset_px=offset_px)
+                (bx1, by1), (bx2, by2) = lineB_result
+                response["lineB"] = [
+                    {"x": float(bx1), "y": float(by1)},
+                    {"x": float(bx2), "y": float(by2)},
+                ]
+                logger.info(f"✓ Tính lineB thành công: {response['lineB']}")
+
+                # Tính ROI từ lineB (từ lineB xuống đáy stream, kéo dài hết chiều ngang)
+                try:
+                    roi_result = calculate_roi_from_lineB(lineB_result)
+                    response["roi"] = [{"x": float(px), "y": float(py)} for px, py in roi_result]
+                    logger.info(f"✓ Tính ROI thành công: {len(response['roi'])} điểm")
+                except Exception as e:
+                    logger.error(f"Lỗi khi tính ROI: {e}")
+
+            except Exception as e:
+                logger.error(f"Lỗi khi tính lineB: {e}")
         else:
             logger.info("Không phát hiện được vạch dừng")
 

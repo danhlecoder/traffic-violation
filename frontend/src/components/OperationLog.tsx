@@ -16,12 +16,9 @@ export interface LogEntry {
   details?: string
 }
 
-// Mock data cho demo
-const mockLogs: LogEntry[] = []
-
 export default function OperationLog({ logs, onSelect }: { logs?: LogEntry[]; onSelect?: (payload: { plate?: string; violationType?: string; camera?: string }) => void }) {
   const storeLogs = useStore((s) => s.operationLogs)
-  const normalized = (logs ?? storeLogs.map(l => ({
+  const items = (logs ?? storeLogs.map(l => ({
     id: l.id,
     timestamp: new Date(l.timestamp),
     user: l.user,
@@ -31,7 +28,6 @@ export default function OperationLog({ logs, onSelect }: { logs?: LogEntry[]; on
     camera: l.camera,
     details: l.details,
   })))
-  const items = normalized.length > 0 ? normalized : mockLogs
   // Hàm lấy icon và color cho action
   const getActionInfo = (action: string) => {
     switch (action) {

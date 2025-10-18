@@ -49,6 +49,34 @@ export default function RegionEditorModal({
   const [loadingDetect, setLoadingDetect] = useState(false)
   const [loadingRegions, setLoadingRegions] = useState(false)
 
+  // Tạo ROI tự động từ lineB hiện tại
+  const createAutoROI = useCallback(async () => {
+    const lineB = cameraRegion.lineB
+    if (!lineB || lineB.length !== 2) {
+      message.error('Cần có lineB trước. Click "Line tự động" để tạo.')
+      return
+    }
+
+    try {
+      // Tính y trung bình của lineB làm cạnh trên
+      const y_top = (lineB[0].y + lineB[1].y) / 2
+
+      // Tạo 4 điểm ROI: từ lineB xuống đáy, kéo dài hết chiều ngang
+      const roi = [
+        { x: 0, y: y_top },   // Top-left
+        { x: 1, y: y_top },   // Top-right
+        { x: 1, y: 1 },       // Bottom-right
+        { x: 0, y: 1 },       // Bottom-left
+      ]
+
+      setCameraRegion(cameraId, { roi })
+      await streams.updateCameraRegions(cameraId, { roi })
+      message.success('Đã tạo ROI tự động từ lineB')
+    } catch (e: any) {
+      message.error(`Lỗi tạo ROI: ${e?.message || e}`)
+    }
+  }, [cameraRegion.lineB, cameraId, setCameraRegion])
+
   // Khi modal mở, nạp ngay regions từ backend để tránh lệ thuộc store cũ
   useEffect(() => {
     if (!open || !cameraId) return
@@ -126,12 +154,26 @@ export default function RegionEditorModal({
       if (!resp) throw new Error('no response')
       if (!resp.ok) throw new Error(`detect failed: ${resp.status}`)
       const data = await resp.json()
+      console.log('🎯 Response data:', data)
       const line = data?.stopLine
+      const lineB = data?.lineB
+      const roi = data?.roi
+      console.log('📍 lineB:', lineB, 'roi:', roi)
       if (line && line.length === 2) {
-        const payload = { stopLine: line as any }
+        const payload: any = { stopLine: line }
+        if (lineB && lineB.length === 2) {
+          payload.lineB = lineB
+        }
+        if (roi && roi.length >= 3) {
+          payload.roi = roi
+        }
+        console.log('📦 Payload sẽ gửi:', payload)
         setCameraRegion(cameraId, payload)
         await streams.updateCameraRegions(cameraId, payload)
-        message.success('Đã phát hiện và lưu vạch dừng')
+        const parts = ['stopLine']
+        if (lineB) parts.push('lineB')
+        if (roi) parts.push('ROI')
+        message.success(`Đã phát hiện và lưu: ${parts.join(' + ')}`)
         if (data?.image) {
           // Cập nhật luôn ảnh nếu server trả về
           try { setTimeout(() => setLoadingDetect(false), 0) } catch {}
@@ -195,18 +237,25 @@ export default function RegionEditorModal({
                   <Tooltip title="Vẽ vùng đèn giao thông (đa giác)">
                     <Button size="small" icon={<HighlightOutlined />} onClick={() => setMode('draw-roi')}>ROI</Button>
                   </Tooltip>
-                  <Tooltip title="Phát hiện vạch dừng tự động">
+                  <Tooltip title="Phát hiện vạch dừng tự động (stopLine + lineB + ROI)">
                     <Button size="small" loading={loadingDetect} disabled={!imageSrc} onClick={runAutoDetect}>Line tự động</Button>
                   </Tooltip>
+                  {cameraRegion.lineB && (
+                    <Tooltip title="Tạo ROI từ lineB hiện tại">
+                      <Button size="small" onClick={createAutoROI}>ROI tự động</Button>
+                    </Tooltip>
+                  )}
                   {cameraRegion.stopLine && (
-                    <Tooltip title="Xóa vạch dừng">
+                    <Tooltip title="Xóa vạch dừng (và lineB, ROI)">
                       <Button
                         size="small"
                         danger
                         icon={<ClearOutlined />}
                         onClick={async () => {
                           clearCameraRegion(cameraId, 'stopLine')
-                          try { await streams.updateCameraRegions(cameraId, { stopLine: null }) } catch {}
+                          clearCameraRegion(cameraId, 'lineB')
+                          clearCameraRegion(cameraId, 'roi')
+                          try { await streams.updateCameraRegions(cameraId, { stopLine: null, lineB: null, roi: null }) } catch {}
                         }}
                       >Xóa line</Button>
                     </Tooltip>

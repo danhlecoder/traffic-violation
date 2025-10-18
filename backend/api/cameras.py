@@ -136,6 +136,8 @@ def update_regions(cam_id: str, regions: CameraRegion):
             else regions.dict(exclude_unset=True, exclude_none=False)
         )
 
+        logger.info(f"📦 Payload nhận được: {payload}")
+
         if not payload:
             return {'ok': True}
 
@@ -168,6 +170,8 @@ def update_regions(cam_id: str, regions: CameraRegion):
         if not update_doc:
             return {'ok': True}
 
+        logger.info(f"🔧 Update document: {update_doc}")
+
         # Thực hiện update
         result = db.cameras.update_one(
             {'id': cam_id},
@@ -175,7 +179,7 @@ def update_regions(cam_id: str, regions: CameraRegion):
             upsert=True
         )
 
-        logger.info(f"✓ Đã cập nhật regions cho camera: {cam_id}")
+        logger.info(f"✓ Đã cập nhật regions cho camera: {cam_id} (modified: {result.modified_count})")
         return {'ok': True}
 
     except Exception as e:

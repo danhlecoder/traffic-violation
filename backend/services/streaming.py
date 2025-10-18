@@ -13,7 +13,7 @@ from typing import Generator, Optional
 import cv2
 
 from ..core.config import settings
-from .detector import get_yolo_detector
+from .detector import get_yolo_detector, filter_detections_by_roi
 from .vehicle_density import count_vehicles, get_vehicle_density_info, update_vehicle_count
 from ..utils.logger import stream_logger as logger
 
@@ -70,7 +70,8 @@ def generate_mjpeg(
     src: str,
     fps: Optional[int] = None,
     jpeg_quality: Optional[int] = None,
-    enable_detection: bool = True
+    enable_detection: bool = True,
+    roi: Optional[list] = None
 ) -> Generator[bytes, None, None]:
     """
     Generator tạo MJPEG stream từ nguồn RTSP/HTTP với YOLO detection
@@ -80,6 +81,7 @@ def generate_mjpeg(
         fps: FPS mục tiêu, mặc định lấy từ settings
         jpeg_quality: Chất lượng JPEG (10-95), mặc định lấy từ settings
         enable_detection: Bật/tắt YOLO detection
+        roi: ROI normalized [{x, y}, ...] để filter bbox (None = hiện tất cả)
 
     Yields:
         Bytes của multipart MJPEG stream
@@ -114,34 +116,34 @@ def generate_mjpeg(
         skip_counter = 0
         skip_frames = settings.STREAM_SKIP_FRAMES
         frame_count = 0
-        
+
         while True:
             # Clear buffer - đọc và bỏ frame cũ để giảm lag
             for _ in range(skip_frames):
                 cap.grab()
-            
+
             ret, frame = cap.read()
             frame_count += 1
-            
+
             if not ret:
                 logger.warning(f"Không đọc được frame (frame {frame_count}), tiếp tục...")
                 time.sleep(0.05)
-                
+
                 # Nếu liên tục lỗi quá nhiều, dừng stream
                 if frame_count > 100 and frame_count % 50 == 0:
                     logger.error("Quá nhiều lỗi đọc frame, dừng stream")
                     break
-                
+
                 continue
 
             # Throttle FPS (giảm sleep time)
             current_time = time.time()
             elapsed = current_time - last_frame_time
-            
+
             if elapsed < delay:
                 sleep_time = min(delay - elapsed, 0.01)  # Max sleep 10ms
                 time.sleep(sleep_time)
-            
+
             last_frame_time = time.time()
 
             # Validate frame trước khi xử lý
@@ -176,32 +178,36 @@ def generate_mjpeg(
                             scale = detection_width / w
                             new_h = int(h * scale)
                             det_frame = cv2.resize(frame, (detection_width, new_h), interpolation=cv2.INTER_LINEAR)
-                            
+
                             # Detect trên frame nhỏ
                             detections = detector.detect(det_frame)
-                            
+
                             # Scale bbox về kích thước gốc
                             scale_back = w / detection_width
                             for det in detections:
                                 det["bbox"] = [coord * scale_back for coord in det["bbox"]]
-                            
-                            # Vẽ lên frame gốc
-                            frame = detector.draw_detections(frame, detections)
                         else:
-                            frame, detections = detector.detect_and_draw(frame)
+                            detections = detector.detect(frame)
                     else:
-                        frame, detections = detector.detect_and_draw(frame)
-                    
-                    # Đếm mật độ phương tiện
+                        detections = detector.detect(frame)
+
+                    # Đếm mật độ phương tiện TỪ TẤT CẢ DETECTIONS (trước khi filter)
                     vehicle_count = count_vehicles(detections)
-                    
+
+                    # Filter detections theo ROI (chỉ vẽ bbox trong ROI)
+                    h, w = frame.shape[:2]
+                    detections_to_draw = filter_detections_by_roi(detections, roi, w, h)
+
+                    # Vẽ chỉ detections trong ROI
+                    frame = detector.draw_detections(frame, detections_to_draw)
+
                     # Cập nhật cache cho camera này
                     update_vehicle_count(src, vehicle_count)
-                    
+
                     # Update density cache
                     if frame_count % 100 == 0 and detections:
                         density_info = get_vehicle_density_info(vehicle_count)
-                        
+
                 except Exception as e:
                     logger.error(f"Lỗi khi chạy detection: {e}")
                     # Tiếp tục stream với frame gốc

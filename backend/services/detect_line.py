@@ -8,7 +8,7 @@ Chức năng:
 """
 
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import cv2
 import numpy as np
 
@@ -228,3 +228,159 @@ def detect_stop_line_normalized(frame_bgr: np.ndarray) -> Optional[Segment]:
     p2_norm = _normalize_point((x2, y2), w, h)
 
     return p1_norm, p2_norm
+
+
+def _has_traffic_lights(frame_bgr: np.ndarray) -> bool:
+    """
+    Kiểm tra xem frame có chứa đèn giao thông không
+
+    Args:
+        frame_bgr: Frame ảnh BGR
+
+    Returns:
+        True nếu phát hiện đèn giao thông (light_red, light_green, light_yellow)
+    """
+    try:
+        from .detector import get_yolo_detector
+
+        detector = get_yolo_detector()
+        detections = detector.detect(frame_bgr)
+
+        # Tìm các class đèn giao thông
+        traffic_light_classes = {"light_red", "light_green", "light_yellow"}
+
+        for det in detections:
+            class_name = det.get("class_name", "")
+            if class_name in traffic_light_classes:
+                logger.info(f"✓ Phát hiện đèn giao thông: {class_name}")
+                return True
+
+        logger.info("✗ Không phát hiện đèn giao thông")
+        return False
+
+    except Exception as e:
+        logger.error(f"Lỗi khi kiểm tra traffic light: {e}")
+        return False
+
+
+def _create_default_stopline() -> Segment:
+    """
+    Tạo line ngang mặc định ở vị trí 2/3 chiều cao ảnh
+
+    Returns:
+        Tuple 2 điểm chuẩn hóa tại y = 2/3
+    """
+    y_position = 2.0 / 3.0
+    return (0.0, y_position), (1.0, y_position)
+
+
+def calculate_lineB_from_stopline(
+    stopline_result: Tuple[Tuple[float, float], Tuple[float, float]],
+    image_height: int,
+    offset_px: int = 64
+) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    """
+    Tính toán lineB từ stopLine bằng cách offset lên trên offset_px pixels
+
+    Args:
+        stopline_result: Tuple 2 điểm của stopLine đã normalize ((x1,y1), (x2,y2))
+        image_height: Chiều cao ảnh gốc (px)
+        offset_px: Khoảng cách offset (px), mặc định 64px
+
+    Returns:
+        Tuple 2 điểm của lineB đã normalize
+    """
+    (x1, y1), (x2, y2) = stopline_result
+
+    # Chuyển y về pixel
+    y1_px = y1 * image_height
+    y2_px = y2 * image_height
+
+    # Offset lên trên
+    y1_new_px = y1_px - offset_px
+    y2_new_px = y2_px - offset_px
+
+    # Normalize lại
+    y1_new = y1_new_px / image_height
+    y2_new = y2_new_px / image_height
+
+    # Clamp trong [0, 1]
+    y1_new = max(0.0, min(1.0, y1_new))
+    y2_new = max(0.0, min(1.0, y2_new))
+
+    return (x1, y1_new), (x2, y2_new)
+
+
+def calculate_roi_from_lineB(
+    lineB_result: Tuple[Tuple[float, float], Tuple[float, float]]
+) -> List[Tuple[float, float]]:
+    """
+    Tạo ROI tự động từ lineB
+    ROI là hình chữ nhật với:
+    - Cạnh trên: lineB kéo dài đến 2 bên (x=0 và x=1)
+    - Cạnh dưới: đáy stream (y=1)
+
+    Args:
+        lineB_result: Tuple 2 điểm của lineB đã normalize ((x1,y1), (x2,y2))
+
+    Returns:
+        List 4 điểm tạo thành ROI [top-left, top-right, bottom-right, bottom-left]
+    """
+    (x1, y1), (x2, y2) = lineB_result
+
+    # Lấy y trung bình của lineB làm cạnh trên
+    y_top = (y1 + y2) / 2.0
+
+    # Clamp trong [0, 1]
+    y_top = max(0.0, min(1.0, y_top))
+
+    # ROI từ lineB xuống đáy stream, kéo dài hết chiều ngang
+    roi_points = [
+        (0.0, y_top),      # Top-left: x=0, y=lineB
+        (1.0, y_top),      # Top-right: x=1, y=lineB
+        (1.0, 1.0),        # Bottom-right: x=1, y=1 (đáy)
+        (0.0, 1.0),        # Bottom-left: x=0, y=1 (đáy)
+    ]
+
+    return roi_points
+
+
+def detect_stop_line_with_fallback(frame_bgr: np.ndarray) -> Optional[Segment]:
+    """
+    Phát hiện vạch dừng với logic fallback:
+    - Nếu có đèn giao thông: sử dụng detect line tự động
+    - Nếu không có: tạo line ngang ở vị trí 2/3 chiều cao ảnh
+
+    Args:
+        frame_bgr: Frame ảnh BGR (thường là frame đầu tiên)
+
+    Returns:
+        Tuple 2 điểm chuẩn hóa [0..1]
+    """
+    if frame_bgr is None or frame_bgr.size == 0:
+        logger.warning("Frame rỗng, sử dụng default line")
+        return _create_default_stopline()
+
+    try:
+        # Kiểm tra có traffic light không
+        has_traffic_light = _has_traffic_lights(frame_bgr)
+
+        if has_traffic_light:
+            # Có traffic light -> dùng detect line tự động
+            logger.info("Sử dụng detect line tự động (có traffic light)")
+            result = detect_stop_line_normalized(frame_bgr)
+
+            if result is not None:
+                logger.info(f"✓ Detect line thành công: {result}")
+                return result
+            else:
+                logger.warning("Detect line thất bại, sử dụng default line")
+                return _create_default_stopline()
+        else:
+            # Không có traffic light -> tạo line mặc định
+            logger.info("Tạo line ngang mặc định ở vị trí 2/3 (không có traffic light)")
+            return _create_default_stopline()
+
+    except Exception as e:
+        logger.error(f"Lỗi trong detect_stop_line_with_fallback: {e}")
+        return _create_default_stopline()

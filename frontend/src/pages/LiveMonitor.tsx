@@ -12,35 +12,6 @@ import ViolationList from '../components/violations/ViolationList'
 import SectionHeader from '../components/SectionHeader'
 import { confirmAction } from '../utils/confirm'
 
-function randomPlate() {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  const nums = () => Math.floor(Math.random() * 10)
-  return `${Math.floor(Math.random() * 99)}${letters[Math.floor(Math.random() * letters.length)]}-${nums()}${nums()}${nums()}${nums()}${nums()}`
-}
-
-function createMockViolation(cam: { id: string; name: string; location: string }, settings: ReturnType<typeof useStore.getState>['settings']): Violation {
-  const type = VIOLATION_TYPES[Math.floor(Math.random() * VIOLATION_TYPES.length)]
-  const speed = type === 'Quá tốc độ' ? settings.speedLimit + Math.floor(Math.random() * 50) : undefined
-  return {
-    id: `V${Date.now()}-${Math.floor(Math.random() * 999)}`,
-    type,
-    cameraId: cam.id,
-    cameraName: cam.name,
-    location: cam.location,
-    time: new Date().toISOString(),
-    speed,
-    plate: randomPlate(),
-    vehicleType: Math.random() > 0.5 ? 'Xe máy' : 'Ô tô',
-    confidence: Math.round((0.6 + Math.random() * 0.39) * 100) / 100,
-    images: {
-      overview: '/placeholders/panorama.svg',
-      vehicle: '/placeholders/vehicle.svg',
-      plate: '/placeholders/plate.svg',
-    },
-    status: 'Mới',
-  }
-}
-
 export default function LiveMonitor() {
   const settings = useStore((s) => s.settings)
   const { cameras, zaloToken, zaloTargetId } = settings
@@ -69,19 +40,6 @@ export default function LiveMonitor() {
       monitorPage: currentPage,
     })
   }, [showAll, selectedCamIds, focusedCamId, currentPage, updateSettings])
-
-  // Tạo luồng dữ liệu giả lập
-  useEffect(() => {
-    if (!cameras || cameras.length === 0) return
-    const interval = setInterval(() => {
-      if (!cameras || cameras.length === 0) return
-      const cam = cameras[Math.floor(Math.random() * cameras.length)]
-      if (!cam) return
-      const v = createMockViolation(cam, useStore.getState().settings)
-      addViolation(v)
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [addViolation, cameras])
 
   // Khi khởi động trang, cố gắng tải danh sách camera và vùng vẽ từ backend nếu có
   useEffect(() => {

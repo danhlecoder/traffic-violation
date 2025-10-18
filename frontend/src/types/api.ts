@@ -6,6 +6,7 @@ export type Point = { x: number; y: number }
 
 export type CameraRegion = {
   stopLine?: [Point, Point] | null
+  lineB?: [Point, Point] | null
   roi?: Point[] | null
 }
 

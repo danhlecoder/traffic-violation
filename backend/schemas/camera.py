@@ -15,6 +15,7 @@ class Point(BaseModel):
 class CameraRegion(BaseModel):
     """Vùng quan tâm trên camera"""
     stopLine: Optional[tuple[Point, Point]] = Field(None, description="Vạch dừng (2 điểm)")
+    lineB: Optional[tuple[Point, Point]] = Field(None, description="Line B song song với stopLine, cách 64px")
     roi: Optional[list[Point]] = Field(None, description="Vùng quan tâm (danh sách điểm)")
 
 

@@ -68,8 +68,16 @@ export default function CameraTile({
       if (!resp.ok) throw new Error('auto detect failed')
       const data = await resp.json()
       const line = data?.stopLine
+      const lineB = data?.lineB
+      const roi = data?.roi
       if (line && line.length === 2) {
-        const payload = { stopLine: line as any }
+        const payload: any = { stopLine: line }
+        if (lineB && lineB.length === 2) {
+          payload.lineB = lineB
+        }
+        if (roi && roi.length >= 3) {
+          payload.roi = roi
+        }
         setCameraRegion(cameraId, payload)
         try { await streams.updateCameraRegions(cameraId, payload) } catch {}
         autoDetectRanRef.current = true
