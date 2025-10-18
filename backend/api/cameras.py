@@ -1,12 +1,5 @@
 """
-Camera Management API
-
-Endpoints:
-- GET    /api/cameras         - Danh sách cameras
-- POST   /api/cameras         - Thêm/cập nhật camera
-- GET    /api/cameras/{id}    - Chi tiết camera
-- PUT    /api/cameras/{id}/regions - Cập nhật regions
-- DELETE /api/cameras/{id}    - Xóa camera
+Camera Management API - CRUD operations cho cameras
 """
 
 from typing import Any, Dict

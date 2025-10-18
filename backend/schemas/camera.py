@@ -14,8 +14,8 @@ class Point(BaseModel):
 
 class CameraRegion(BaseModel):
     """Vùng quan tâm trên camera"""
-    stopLine: Optional[tuple[Point, Point]] = Field(None, description="Vạch dừng (2 điểm)")
-    lineB: Optional[tuple[Point, Point]] = Field(None, description="Line B song song với stopLine, cách 64px")
+    stopLine: Optional[list[Point]] = Field(None, description="Vạch dừng (2 điểm)")
+    lineB: Optional[list[Point]] = Field(None, description="Line B song song với stopLine")
     roi: Optional[list[Point]] = Field(None, description="Vùng quan tâm (danh sách điểm)")
 
 
@@ -26,6 +26,3 @@ class Camera(BaseModel):
     rtsp: str = Field(..., description="URL RTSP của camera")
     location: str = Field(..., description="Vị trí lắp đặt camera")
     regions: Optional[CameraRegion] = Field(None, description="Các vùng đã cấu hình")
-
-
-

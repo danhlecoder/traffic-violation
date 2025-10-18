@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from .config import settings
 from ..services.database import init_indexes, close_connection
-from ..services.detector import get_yolo_detector
+from ..services.yolo_detector import get_yolo_detector
 from ..utils.logger import app_logger as logger
 
 

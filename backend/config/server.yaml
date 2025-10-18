@@ -15,7 +15,7 @@ logging:
 
 # YOLO Model
 yolo:
-  model_path: /app/backend/model/best.pt
+  model_path: /app/backend/models/best.pt
   device: cpu
 
 # Database

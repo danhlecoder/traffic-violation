@@ -1,10 +1,5 @@
 """
 RTSP Streaming Service - MJPEG streaming từ RTSP/HTTP với YOLO detection
-
-Chức năng:
-- Mở và duy trì kết nối RTSP (với auto-reconnect)
-- Generate MJPEG stream từ RTSP source
-- Tích hợp YOLO detection real-time
 """
 
 import os
@@ -13,7 +8,8 @@ from typing import Generator, Optional
 import cv2
 
 from ..core.config import settings
-from .detector import get_yolo_detector, filter_detections_by_roi
+from .yolo_detector import get_yolo_detector
+from .detection_filters import filter_detections_by_roi
 from .vehicle_density import count_vehicles, get_vehicle_density_info, update_vehicle_count
 from ..utils.logger import stream_logger as logger
 

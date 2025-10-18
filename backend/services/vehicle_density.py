@@ -1,10 +1,5 @@
 """
-Vehicle Density Service - Đếm và quản lý mật độ phương tiện
-
-Chức năng:
-- Đếm số lượng phương tiện (bus, car, motorcycle, truck) trong detections
-- Phân loại mật độ theo ngưỡng
-- Cache quản lý vehicle count theo camera (thread-safe)
+Vehicle Density Service - Đếm và phân loại mật độ phương tiện
 """
 
 from typing import List, Dict, Any
@@ -12,10 +7,6 @@ from threading import Lock
 
 from ..core.config import settings
 
-
-# ============================================================================
-# VEHICLE COUNTING
-# ============================================================================
 
 VEHICLE_CLASSES = {"bus", "car", "motorcycle", "truck"}
 
@@ -89,10 +80,7 @@ def get_vehicles_by_type(detections: List[Dict[str, Any]]) -> Dict[str, int]:
     return result
 
 
-# ============================================================================
-# CACHE MANAGEMENT (Thread-safe)
-# ============================================================================
-
+# Cache management (thread-safe)
 _vehicle_count_cache: Dict[str, int] = {}
 _cache_lock = Lock()
 

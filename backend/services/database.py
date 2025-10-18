@@ -1,10 +1,5 @@
 """
-Database Service - Quản lý kết nối MongoDB
-
-Chức năng:
-- Quản lý MongoDB client (singleton pattern)
-- Khởi tạo indexes
-- Đóng kết nối khi shutdown
+Database Service - MongoDB connection management (singleton)
 """
 
 from typing import Optional
