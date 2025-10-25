@@ -7,7 +7,7 @@ import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from ..core.config import settings
+from ..config.config import settings
 
 
 def _create_logger(name: str) -> logging.Logger:

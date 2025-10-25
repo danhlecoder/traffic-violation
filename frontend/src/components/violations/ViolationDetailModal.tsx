@@ -179,14 +179,28 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
           )}
           
           {/* Preview toàn màn hình hơn, hỗ trợ double click để đóng */}
-          <Modal open={previewOpen} onCancel={() => setPreviewOpen(false)} footer={null} width={1000} centered>
-            <div onDoubleClick={() => setPreviewOpen(false)}>
-              {previewSrc ? (
-                <img className="preview-img" src={previewSrc} alt="preview" />
-              ) : (
-                <div className="preview-blank" />
-              )}
-            </div>
+          <Modal 
+            open={previewOpen} 
+            onCancel={() => setPreviewOpen(false)} 
+            footer={null} 
+            width="auto"
+            centered
+            className="preview-modal"
+            styles={{
+              body: { padding: 0, background: 'transparent' },
+              content: { padding: 0, background: 'transparent', border: 'none' }
+            }}
+          >
+            {previewSrc ? (
+              <img 
+                className={previewSrc === data?.images?.overview ? "preview-img-overview" : "preview-img"} 
+                src={previewSrc} 
+                alt="preview"
+                onDoubleClick={() => setPreviewOpen(false)}
+              />
+            ) : (
+              <div className="preview-blank" onDoubleClick={() => setPreviewOpen(false)} />
+            )}
           </Modal>
           {videoUrl && (
             <Modal open={videoOpen} onCancel={() => setVideoOpen(false)} footer={null} width={900} title="Video minh chứng">

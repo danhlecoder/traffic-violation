@@ -25,6 +25,7 @@ export type VehicleDensity = {
 }
 
 export type ViolationType =
+  | 'Phát hiện'
   | 'Vượt đèn đỏ'
   | 'Quá tốc độ'
   | 'Không đội mũ bảo hiểm'

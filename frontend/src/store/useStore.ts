@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { CameraRegion } from '../types/regions'
 
-export type ViolationType = 'Vượt đèn đỏ' | 'Không đội mũ' | 'Quá tốc độ'
+export type ViolationType = 'Phát hiện' | 'Vượt đèn đỏ' | 'Không đội mũ' | 'Quá tốc độ'
 export type ViolationStatus = 'Mới' | 'Đã xác nhận' | 'Đã bỏ qua'
 
 export interface Violation {
@@ -101,7 +101,13 @@ function loadPersistedSettings(): Settings {
 
 export const useStore = create<State>((set) => ({
   violations: [],
-  addViolation: (v) => set((s) => ({ violations: [v, ...s.violations] })),
+  addViolation: (v) => set((s) => {
+    // Check duplicate by ID
+    if (s.violations.some(existing => existing.id === v.id)) {
+      return s // Skip nếu đã tồn tại
+    }
+    return { violations: [v, ...s.violations] }
+  }),
   updateViolation: (id, patch) => set((s) => ({
     violations: s.violations.map((x) => (x.id === id ? { ...x, ...patch } : x)),
   })),
@@ -153,5 +159,5 @@ export const useStore = create<State>((set) => ({
   }),
 }))
 
-export const VIOLATION_TYPES: ViolationType[] = ['Vượt đèn đỏ', 'Không đội mũ', 'Quá tốc độ']
+export const VIOLATION_TYPES: ViolationType[] = ['Phát hiện', 'Vượt đèn đỏ', 'Không đội mũ', 'Quá tốc độ']
 

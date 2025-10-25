@@ -5,8 +5,8 @@ Camera Management API - CRUD operations cho cameras
 from typing import Any, Dict
 from fastapi import APIRouter, HTTPException
 
-from ..schemas.camera import Camera, CameraRegion
-from ..services.database import get_db
+from ..utils.camera import Camera, CameraRegion
+from ..utils.database import get_db
 from ..utils.logger import app_logger as logger
 
 
@@ -16,10 +16,7 @@ router = APIRouter()
 @router.get('/api/cameras')
 def list_cameras():
     """
-    Lấy danh sách tất cả cameras với regions đã cấu hình
-
-    Returns:
-        List[Camera]: Danh sách cameras
+    Danh sách cameras
     """
     try:
         db = get_db()
@@ -41,15 +38,11 @@ def list_cameras():
 @router.post('/api/cameras')
 def upsert_camera(cam: Camera):
     """
-    Thêm mới hoặc cập nhật camera
-
-    Args:
-        cam: Thông tin camera
-
-    Returns:
-        dict: Kết quả thành công
+    Thêm/sửa camera
     """
     try:
+        # Debug log
+        logger.info(f"📥 Received camera data: {cam.model_dump()}")
         db = get_db()
 
         # Chuyển đổi sang dict, loại bỏ các field None để tránh ghi đè
@@ -78,12 +71,6 @@ def upsert_camera(cam: Camera):
 def get_camera(cam_id: str):
     """
     Lấy thông tin chi tiết một camera
-
-    Args:
-        cam_id: ID của camera
-
-    Returns:
-        Camera: Thông tin camera
     """
     try:
         db = get_db()
@@ -110,14 +97,7 @@ def get_camera(cam_id: str):
 @router.put('/api/cameras/{cam_id}/regions')
 def update_regions(cam_id: str, regions: CameraRegion):
     """
-    Cập nhật regions (vạch dừng và ROI) cho camera
-
-    Args:
-        cam_id: ID của camera
-        regions: Thông tin regions mới
-
-    Returns:
-        dict: Kết quả thành công
+    Cập nhật ROI/stopline
     """
     try:
         db = get_db()
@@ -184,12 +164,6 @@ def update_regions(cam_id: str, regions: CameraRegion):
 def delete_camera(cam_id: str):
     """
     Xóa camera
-
-    Args:
-        cam_id: ID của camera
-
-    Returns:
-        dict: Kết quả thành công
     """
     try:
         db = get_db()

@@ -8,9 +8,10 @@ from .api.streams import router as streams_router
 from .api.cameras import router as cameras_router
 from .api.detection import router as detection_router
 from .api.density import router as density_router
-from .core.config import settings
-from .core.startup import lifespan
-from .core.middleware import setup_cors
+from .api.violations import router as violations_router
+from .config.config import settings
+from .api.lifecycle import lifespan
+from .api.middleware import setup_cors
 
 
 app = FastAPI(
@@ -38,6 +39,7 @@ app.include_router(streams_router, tags=["Streaming"])
 app.include_router(cameras_router, tags=["Cameras"])
 app.include_router(detection_router, tags=["Detection"])
 app.include_router(density_router, tags=["Density"])
+app.include_router(violations_router, tags=["Violations"])
 
 
 if __name__ == "__main__":

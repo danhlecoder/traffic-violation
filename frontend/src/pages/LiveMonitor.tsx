@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Row, Col, Space, Select, Button, Grid, Card, Pagination } from 'antd'
-import { useStore, VIOLATION_TYPES, Violation } from '../store/useStore'
+import { useStore, VIOLATION_TYPES, Violation, ViolationType } from '../store/useStore'
 import { streams } from '../services/api'
-import { confirmViolation, skipViolation } from '../services/violations'
+import { confirmViolation, skipViolation, getViolations } from '../services/violations'
 import { sendZalo } from '../services/zalo'
 import ViolationDetailModal from '../components/violations/ViolationDetailModal'
 import CameraTile from '../components/CameraTile'
@@ -57,6 +57,43 @@ export default function LiveMonitor() {
     })()
   }, [updateSettings])
 
+  // Fetch violations từ backend
+  useEffect(() => {
+    const fetchViolations = async () => {
+      try {
+        const response = await getViolations({ limit: 100, status: 'detected' })
+        
+        const violationsFromAPI: Violation[] = response.data.map((v) => ({
+          id: v.id,
+          time: v.timestamp,
+          cameraId: v.camera_id,
+          cameraName: v.camera_name || `Camera ${v.camera_id}`,
+          location: v.location || 'Không rõ',
+          vehicleType: v.vehicle_type,
+          plate: v.license_plate,
+          confidence: v.confidence,
+          type: 'Phát hiện',
+          status: 'Mới',
+          images: {
+            overview: v.images.full_frame || '',
+            vehicle: v.images.vehicle_crop || '',
+            plate: v.images.plate_crop || '',
+          },
+        }))
+        
+        for (const violation of violationsFromAPI) {
+          addViolation(violation)
+        }
+      } catch (e) {
+        console.error('Lỗi fetch violations:', e)
+      }
+    }
+    
+    fetchViolations()
+    const interval = setInterval(fetchViolations, 5000)
+    return () => clearInterval(interval)
+  }, [addViolation])
+
   // Poll vehicle density từ backend mỗi 2 giây
   useEffect(() => {
     if (!cameras || cameras.length === 0) return
@@ -79,7 +116,7 @@ export default function LiveMonitor() {
     return () => clearInterval(interval)
   }, [cameras])
 
-  const [filter, setFilter] = useState<'Tất cả' | 'Vượt đèn đỏ' | 'Quá tốc độ' | 'Không đội mũ'>('Tất cả')
+  const [filter, setFilter] = useState<'Tất cả' | ViolationType>('Tất cả')
   const pendingList = useMemo(() => violations.filter(v => v.status === 'Mới').slice(0, 50), [violations])
   const filtered = useMemo(() => (filter === 'Tất cả' ? pendingList : pendingList.filter(v => v.type === filter)), [pendingList, filter])
   const screens = Grid.useBreakpoint()
@@ -89,9 +126,9 @@ export default function LiveMonitor() {
     const pending = violations.filter(v => v.status === 'Mới')
     const total = pending.length
     const red = pending.filter(v => v.type === 'Vượt đèn đỏ').length
-    const spd = pending.filter(v => v.type === 'Quá tốc độ').length
-    const helm = pending.filter(v => v.type === 'Không đội mũ').length
-    return { total, red, spd, helm }
+    const speed = pending.filter(v => v.type === 'Quá tốc độ').length
+    const helmet = pending.filter(v => v.type === 'Không đội mũ').length
+    return { total, red, speed, helmet }
   }, [violations])
 
   async function onConfirm(v: Violation): Promise<boolean> {
@@ -293,14 +330,14 @@ export default function LiveMonitor() {
                 onClick={() => setFilter('Quá tốc độ')}
               >
                 <span className="tab-label">Quá tốc độ</span>
-                <span className="tab-count">{counts.spd}</span>
+                <span className="tab-count">{counts.speed}</span>
               </div>
               <div
                 className={`filter-tab gold ${filter === 'Không đội mũ' ? 'active' : ''}`}
                 onClick={() => setFilter('Không đội mũ')}
               >
                 <span className="tab-label">Không đội mũ</span>
-                <span className="tab-count">{counts.helm}</span>
+                <span className="tab-count">{counts.helmet}</span>
               </div>
             </div>
           </div>

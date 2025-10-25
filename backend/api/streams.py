@@ -7,8 +7,8 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
-from ..services.streaming import generate_mjpeg
-from ..services.database import get_db
+from ..core.streaming.mjpeg import generate_mjpeg
+from ..utils.database import get_db
 from ..utils.logger import app_logger as logger
 
 
@@ -24,18 +24,6 @@ def stream(
 ):
     """
     MJPEG stream từ nguồn RTSP/HTTP với YOLO detection
-
-    Args:
-        rtsp: URL nguồn video (RTSP hoặc HTTP)
-        fps: Frame per second mục tiêu (1-60)
-        quality: Chất lượng JPEG (10-95)
-        detection: Bật/tắt YOLO detection (mặc định: True)
-
-    Returns:
-        StreamingResponse: MJPEG stream
-
-    Example:
-        GET /api/stream?src=rtsp://example.com/stream&fps=30&quality=80&detection=true
     """
     if not rtsp:
         logger.warning("Thiếu tham số 'src' (RTSP URL)")
@@ -47,23 +35,77 @@ def stream(
     try:
         logger.info(f"Bắt đầu stream từ: {rtsp} (FPS={fps}, Quality={quality}, Detection={detection})")
 
-        # Lấy ROI từ database (nếu có)
+        # Lấy ROI, stopline và camera info từ database
         roi = None
+        stopline = None
+        camera_id = None
+        camera_name = None
+        location = None
         try:
             db = get_db()
             camera_doc = db.cameras.find_one({'rtsp': rtsp})
-            if camera_doc and camera_doc.get('regions') and camera_doc['regions'].get('roi'):
-                roi = camera_doc['regions']['roi']
-                logger.info(f"Đã load ROI cho camera (RTSP: {rtsp}): {len(roi)} điểm")
+            if camera_doc:
+                logger.info(f"✓ Tìm thấy camera trong DB cho rtsp: {rtsp}")
+                camera_id = camera_doc.get('id')
+                camera_name = camera_doc.get('name')
+                location = camera_doc.get('location')
+
+                if camera_doc.get('regions'):
+                    regions = camera_doc['regions']
+
+                    # Load ROI
+                    if regions.get('roi'):
+                        roi = regions['roi']
+                        logger.info(f"✓ Đã load ROI cho camera {camera_id}: {len(roi)} điểm")
+                    else:
+                        logger.warning(f"✗ Camera {camera_id} KHÔNG có ROI trong DB!")
+
+                    # Load stopline - Format từ frontend: [{"x": 0, "y": 0.66}, {"x": 1, "y": 0.66}]
+                    if regions.get('stopLine'):
+                        raw_stopline = regions['stopLine']
+
+                        # stopLine là list của 2 points → lấy y từ point đầu
+                        if isinstance(raw_stopline, list) and len(raw_stopline) > 0:
+                            first_point = raw_stopline[0]
+                            if isinstance(first_point, dict) and "y" in first_point:
+                                y_value = float(first_point["y"])
+                                stopline = {
+                                    "y": y_value,
+                                    "is_normalized": (0 <= y_value <= 1)
+                                }
+                                logger.info(f"✓ Đã load stopline: y={y_value:.3f}, normalized={stopline['is_normalized']}")
+                            else:
+                                logger.error(f"Stopline point format sai: {first_point}")
+
+                        # Fallback: dict format
+                        elif isinstance(raw_stopline, dict) and "y" in raw_stopline:
+                            y_value = float(raw_stopline["y"])
+                            stopline = {
+                                "y": y_value,
+                                "is_normalized": (0 <= y_value <= 1)
+                            }
+                            logger.info(f"✓ Đã load stopline (dict): y={y_value:.3f}")
+
+                        else:
+                            logger.error(f"Stopline format không đúng: {type(raw_stopline)}, value={raw_stopline}")
+                    else:
+                        logger.warning(f"Camera {camera_id} KHÔNG có stopLine config!")
+            else:
+                logger.warning(f"✗ KHÔNG tìm thấy camera trong DB cho rtsp: {rtsp}")
         except Exception as e:
-            logger.warning(f"Không thể load ROI từ DB: {e}")
+            logger.warning(f"Không thể load camera info từ DB: {e}")
 
         generator = generate_mjpeg(
             src=rtsp,
             fps=fps,
             jpeg_quality=quality,
             enable_detection=detection,
-            roi=roi
+            roi=roi,
+            stopline=stopline,
+            camera_id=camera_id,
+            camera_name=camera_name,
+            location=location,
+            enable_violation_detection=True
         )
 
         return StreamingResponse(

@@ -69,6 +69,13 @@ html[data-theme="light"]{
 .ant-select-selector{ background: color-mix(in oklab, var(--card) 92%, transparent) !important; border-color: var(--border) !important }
 .ant-select:hover .ant-select-selector{ border-color: color-mix(in oklab, var(--primary) 40%, var(--border)) !important }
 .ant-select-open .ant-select-selector{ border-color: var(--primary) !important; box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 30%, transparent) }
+/* Modal - tối ưu background */
+.ant-modal-content{ background: var(--card) !important; border: 1px solid var(--border); }
+.ant-modal-header{ background: var(--card) !important; border-bottom: 1px solid var(--border); }
+.ant-modal-footer{ background: var(--card) !important; border-top: 1px solid var(--border); }
+/* Modal body - chỉ center cho modal không có header (preview modal) */
+.ant-modal:not(:has(.ant-modal-header)) .ant-modal-body{ display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 0 !important; }
+.ant-modal:not(:has(.ant-modal-header)) .ant-modal-content{ padding: 0 !important; }
 @media (max-width: 768px){
   .brand-logo span{ display:none }
   .ant-layout-header{ padding-inline: 8px !important }
@@ -203,7 +210,7 @@ html[data-theme="light"]{
   gap: 12px;
   align-items: center;
 }
-.vio-thumb{width:72px; height:72px; border-radius:10px}
+.vio-thumb{width:56px; height:56px; border-radius:8px}
 /* Item cũ vẫn giữ để không phá layout cũ nhưng đã tối ưu hover */
 .violation-item{position:relative; border:1px solid var(--border); border-radius: var(--radius); margin-bottom:10px; padding:8px; background: var(--card); box-shadow: var(--shadow); transition: transform .15s ease, border-color .2s ease, background .2s ease}
 .violation-item:hover{transform: translateY(-2px); border-color: color-mix(in oklab, var(--primary) 40%, var(--border)); background: color-mix(in oklab, var(--card) 96%, transparent)}
@@ -213,9 +220,9 @@ html[data-theme="light"]{
 .violation-item.t-gold::before{background: var(--grad-amber)}
 
 /* Redesigned violation list item */
-.vl-item{display:grid; grid-template-columns: clamp(120px,22vw,180px) 1fr auto; gap:12px; align-items:center; border:1px solid var(--border); border-radius: var(--radius); padding:10px; background: var(--card); box-shadow: var(--shadow); margin-bottom:10px; transition: transform .15s ease, border-color .2s ease, background .2s ease}
+.vl-item{display:grid; grid-template-columns: clamp(96px,18vw,140px) 1fr auto; gap:12px; align-items:center; border:1px solid var(--border); border-radius: var(--radius); padding:10px; background: var(--card); box-shadow: var(--shadow); margin-bottom:10px; transition: transform .15s ease, border-color .2s ease, background .2s ease}
 .vl-item:hover{transform: translateY(-2px); border-color: color-mix(in oklab, var(--primary) 40%, var(--border))}
-.vl-thumb{width: 100%; aspect-ratio: 16/10; border-radius:10px; background: color-mix(in oklab, var(--card) 92%, var(--primary)); border:1px solid var(--border); background-size: cover; background-position: center}
+.vl-thumb{width: 100%; aspect-ratio: 16/10; border-radius:8px; background: color-mix(in oklab, var(--card) 92%, var(--primary)); border:1px solid var(--border); background-size: cover; background-position: center}
 .vl-thumb.has-img{border-color: color-mix(in oklab, var(--primary) 40%, var(--border))}
 .vl-content{display:flex; flex-direction:column; gap:6px}
 .vl-top{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
@@ -231,8 +238,16 @@ html[data-theme="light"]{
 .img-tile{background: var(--card); border:1px solid var(--border); border-radius: var(--radius); display:flex; align-items:center; justify-content:center; overflow:hidden}
 .img-blank{width:100%; height:100%; border-radius: calc(var(--radius) - 2px); border:2px dashed var(--border); background: linear-gradient(180deg, color-mix(in oklab, var(--card) 90%, transparent), color-mix(in oklab, var(--card) 70%, transparent));}
 .img-tile.zoomable{cursor: zoom-in}
-.preview-img{width:100%; height:auto; display:block; border-radius: var(--radius); cursor: zoom-out}
-.preview-blank{width:100%; height:70vh; border-radius: var(--radius); border:2px dashed var(--border); background: linear-gradient(180deg, color-mix(in oklab, var(--card) 90%, transparent), color-mix(in oklab, var(--card) 70%, transparent)); cursor: zoom-out}
+.preview-modal .ant-modal{max-width: calc(100vw - 32px) !important;}
+.preview-modal .ant-modal-content{width: fit-content !important; max-width: 90vw !important; padding: 0 !important; border: none !important; background: transparent !important;}
+.preview-modal .ant-modal-body{padding: 0 !important; background: transparent !important;}
+.preview-modal .ant-modal-body > div{display: block; margin: 0; padding: 0;}
+.preview-modal .ant-modal-close{background: rgba(0,0,0,0.6); border-radius: 50%; width: 40px; height: 40px; top: 12px; right: 12px;}
+.preview-modal .ant-modal-close:hover{background: rgba(0,0,0,0.8);}
+.preview-modal .ant-modal-close .ant-modal-close-x{width: 40px; height: 40px; line-height: 40px; color: white;}
+.preview-img{width: auto; min-width: 400px; max-width: 90vw; height: auto; max-height: 90vh; display: block; cursor: zoom-out; margin: 0; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); object-fit: contain;}
+.preview-img-overview{width: auto; max-width: 90vw; height: auto; max-height: 90vh; display: block; cursor: zoom-out; margin: 0; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); object-fit: contain;}
+.preview-blank{min-width: 680px; max-width:680px; height: 500px; border-radius: var(--radius); border:2px dashed var(--border); background: linear-gradient(180deg, color-mix(in oklab, var(--card) 90%, transparent), color-mix(in oklab, var(--card) 70%, transparent)); cursor: zoom-out; margin: 0 auto}
 .section-title{color: var(--muted); margin:6px 4px 12px}
 
 /* Thumb color by type */
@@ -283,7 +298,7 @@ html[data-theme="light"]{
 .vl-item-new{ display: flex; align-items: center; gap: 12px; padding: 10px; margin-bottom: 6px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); transition: all 0.2s ease; position: relative; }
 .vl-item-new::before{ content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--border); border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius); }
 .vl-item-new:hover{ transform: translateY(-1px); border-color: color-mix(in oklab, var(--primary) 40%, var(--border)); background: color-mix(in oklab, var(--card) 96%, transparent); box-shadow: 0 4px 12px color-mix(in oklab, var(--primary) 15%, transparent); }
-.vl-thumb-new{ width: 52px; height: 40px; border-radius: 8px; background: color-mix(in oklab, var(--card) 92%, var(--primary)); border: 1px solid var(--border); background-size: cover; background-position: center; flex-shrink: 0; }
+.vl-thumb-new{ width: 44px; height: 32px; border-radius: 6px; background: color-mix(in oklab, var(--card) 92%, var(--primary)); border: 1px solid var(--border); background-size: cover; background-position: center; flex-shrink: 0; }
 .vl-thumb-new.has-img{ border-color: color-mix(in oklab, var(--primary) 40%, var(--border)); }
 .vl-main{ flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .vl-header{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
