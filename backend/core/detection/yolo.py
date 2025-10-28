@@ -1,224 +1,81 @@
 """
-YOLO Detector - Service phát hiện đối tượng sử dụng YOLOv8
+YOLO Detector - API Client Wrapper Cho Xử Lý Stream
 """
 
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 import numpy as np
 import cv2
-from pathlib import Path
-
-from ...config.config import settings
-from ...config.constants import COLORS_BY_CLASS, DEFAULT_COLOR
+from ...clients.yolo_service import get_yolo_service
 from ...utils.logger import app_logger as logger
 
 
 class YOLODetector:
-    """
-    Service phát hiện đối tượng sử dụng YOLO
-
-    Chức năng:
-    - Load model YOLO một lần duy nhất (singleton)
-    - Detect objects trên frame
-    - Vẽ bounding boxes và labels lên frame
-    """
-
+    """YOLO Detector - Gọi YOLO API Service (chậm hơn nhưng phân tán)"""
+    
     def __init__(self):
-        self._model = None
-        self._model_loaded = False
-        self._model_path = settings.YOLO_MODEL_PATH
-        self._confidence = settings.YOLO_CONFIDENCE
-        self._iou_threshold = settings.YOLO_IOU_THRESHOLD
-        self._device = settings.YOLO_DEVICE
-
-    def _load_model(self):
+        self.service = get_yolo_service()
+        logger.info("✓ YOLO Detector initialized (API mode)")
+    
+    def detect(self, frame: np.ndarray, conf: float = 0.5, iou: float = 0.4) -> List[Dict[str, Any]]:
         """
-        Load YOLO model từ file
-        Chỉ load một lần duy nhất
-        """
-        if self._model_loaded:
-            return
-
-        try:
-            # Import ultralytics YOLO
-            from ultralytics import YOLO
-
-            # Kiểm tra file model tồn tại
-            model_path = Path(self._model_path)
-            if not model_path.exists():
-                logger.error(f"Không tìm thấy file model YOLO tại: {self._model_path}")
-                raise FileNotFoundError(f"Model file not found: {self._model_path}")
-
-            self._model = YOLO(str(model_path))
-            self._model_loaded = True
-
-        except ImportError:
-            logger.error("Không tìm thấy thư viện ultralytics. Vui lòng cài đặt: pip install ultralytics")
-            raise
-        except Exception as e:
-            logger.error(f"Lỗi khi load YOLO model: {e}")
-            raise
-
-    def detect(self, frame: np.ndarray) -> List[Dict[str, Any]]:
-        """
-        Phát hiện đối tượng trên frame
-
-        Args:
-            frame: Frame ảnh (BGR format)
-
+        Phát hiện qua YOLO API
+        
         Returns:
-            List các detection, mỗi detection bao gồm:
-            - bbox: [x1, y1, x2, y2]
-            - confidence: độ tin cậy
-            - class_id: ID của class
-            - class_name: tên class (tiếng Anh)
+            Danh sách detections: [{"bbox": [x1,y1,x2,y2], "confidence": 0.9, "class_name": "car"}, ...]
         """
-        if not self._model_loaded:
-            self._load_model()
-
-        if self._model is None:
-            logger.warning("Model chưa được load, bỏ qua detection")
-            return []
-
-        try:
-            # Chạy inference
-            results = self._model(
-                frame,
-                conf=self._confidence,
-                iou=self._iou_threshold,
-                device=self._device,
-                verbose=False
-            )
-
-            detections = []
-
-            # Parse kết quả
-            if results and len(results) > 0:
-                result = results[0]
-
-                if result.boxes is not None and len(result.boxes) > 0:
-                    boxes = result.boxes.xyxy.cpu().numpy()  # [x1, y1, x2, y2]
-                    confidences = result.boxes.conf.cpu().numpy()
-                    class_ids = result.boxes.cls.cpu().numpy().astype(int)
-
-                    for box, conf, cls_id in zip(boxes, confidences, class_ids):
-                        # Lấy tên class
-                        class_name = result.names[cls_id]
-
-                        detections.append({
-                            "bbox": box.tolist(),
-                            "confidence": float(conf),
-                            "class_id": int(cls_id),
-                            "class_name": class_name
-                        })
-
-            return detections
-
-        except Exception as e:
-            logger.error(f"Lỗi khi chạy detection: {e}")
-            return []
-
-    def draw_detections(self, frame: np.ndarray, detections: List[Dict[str, Any]]) -> np.ndarray:
-        """
-        Vẽ bounding boxes và labels lên frame
-
-        Args:
-            frame: Frame ảnh gốc
-            detections: List các detection từ hàm detect()
-
-        Returns:
-            Frame đã được vẽ annotations
-        """
-        if not detections:
-            return frame
-
-        # Vẽ trực tiếp lên frame (tránh copy để giảm overhead)
-        annotated_frame = frame
-
+        return self.service.detect_vehicle(frame, conf=conf, iou=iou)
+    
+    def draw_detections(self, frame: np.ndarray, detections: List[Dict]) -> np.ndarray:
+        """Vẽ bounding boxes với màu sắc khác nhau cho mỗi class"""
+        # Định nghĩa màu sắc cho mỗi loại phương tiện (BGR format)
+        CLASS_COLORS = {
+            'car': (0, 255, 0),          # Green - Xe hơi
+            'motorcycle': (0, 165, 255), # Orange - Xe máy
+            'truck': (255, 0, 0),        # Blue - Xe tải
+            'bus': (255, 255, 0),        # Cyan - Xe bus
+            'bicycle': (0, 255, 255),    # Yellow - Xe đạp
+            'license_plate': (255, 0, 255),  # Magenta - Biển số
+            'light_red': (0, 0, 255),    # Red - Đèn đỏ
+            'light_green': (0, 255, 0),  # Green - Đèn xanh
+            'light_yellow': (0, 255, 255), # Yellow - Đèn vàng
+            'helmet': (255, 255, 255),   # White - Mũ bảo hiểm
+            'no_helmet': (0, 0, 255),    # Red - Không mũ
+        }
+        
         for det in detections:
-            try:
-                # Lấy thông tin
-                x1, y1, x2, y2 = [int(v) for v in det["bbox"]]
-                confidence = det["confidence"]
-                class_name = det["class_name"]
-
-                # Lấy màu cho class
-                color = COLORS_BY_CLASS.get(class_name, DEFAULT_COLOR)
-
-                # Vẽ bounding box
-                cv2.rectangle(
-                    annotated_frame,
-                    (x1, y1),
-                    (x2, y2),
-                    color,
-                    settings.BBOX_THICKNESS
-                )
-
-                # Tạo label text (với track_id nếu có)
-                track_id = det.get("track_id")
-                if track_id is not None:
-                    label = f"ID:{track_id} {class_name} {confidence:.2f}"
-                else:
-                    label = f"{class_name} {confidence:.2f}"
-
-                # Tính kích thước text để vẽ background
-                (text_width, text_height), baseline = cv2.getTextSize(
-                    label,
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    settings.FONT_SCALE,
-                    settings.FONT_THICKNESS
-                )
-
-                # Vẽ background cho text
-                cv2.rectangle(
-                    annotated_frame,
-                    (x1, y1 - text_height - baseline - 5),
-                    (x1 + text_width, y1),
-                    color,
-                    -1  # Filled
-                )
-
-                # Vẽ text
-                cv2.putText(
-                    annotated_frame,
-                    label,
-                    (x1, y1 - baseline - 2),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    settings.FONT_SCALE,
-                    (255, 255, 255),
-                    settings.FONT_THICKNESS,
-                    cv2.LINE_AA
-                )
-
-            except Exception as e:
-                logger.warning(f"Lỗi khi vẽ detection: {e}")
+            bbox = det.get("bbox")
+            if not bbox or len(bbox) != 4:
                 continue
+            
+            x1, y1, x2, y2 = map(int, bbox)
+            
+            # Lấy thông tin class
+            class_name = det.get('class_name', 'obj')
+            confidence = det.get('confidence', 0)
+            track_id = det.get('track_id')
+            
+            # Chọn màu theo class, mặc định xám nếu không rõ
+            color = CLASS_COLORS.get(class_name, (128, 128, 128))
+            
+            # Xây dựng nhãn
+            if track_id:
+                label = f"ID:{track_id} {class_name} {confidence:.2f}"
+            else:
+                label = f"{class_name} {confidence:.2f}"
+            
+            # Vẽ bbox và nhãn
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        
+        return frame
 
-        return annotated_frame
 
-    def detect_and_draw(self, frame: np.ndarray) -> tuple[np.ndarray, List[Dict[str, Any]]]:
-        """
-        Phát hiện và vẽ annotations lên frame trong một bước
-
-        Args:
-            frame: Frame ảnh gốc
-
-        Returns:
-            (annotated_frame, detections)
-        """
-        detections = self.detect(frame)
-        annotated_frame = self.draw_detections(frame, detections)
-        return annotated_frame, detections
-
-
-_detector_instance: Optional[YOLODetector] = None
-
+# Singleton
+_detector_instance = None
 
 def get_yolo_detector() -> YOLODetector:
-    """
-    Lấy instance singleton của YOLODetector
-    """
+    """Lấy YOLO detector instance (API client)"""
     global _detector_instance
     if _detector_instance is None:
         _detector_instance = YOLODetector()
     return _detector_instance
-

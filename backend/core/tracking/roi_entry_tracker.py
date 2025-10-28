@@ -37,7 +37,7 @@ class TrackROIState:
             is_in_roi: Track có trong ROI không
             
         Returns:
-            True nếu đây là entry event (OUTSIDE → INSIDE)
+            True nếu đây là entry event (OUTSIDE → INSIDE hoặc UNKNOWN → INSIDE)
         """
         self.last_update = datetime.now()
         
@@ -45,9 +45,11 @@ class TrackROIState:
         new_state = ROIState.INSIDE if is_in_roi else ROIState.OUTSIDE
         
         # Check for entry event
+        # Case 1: Normal entry (OUTSIDE → INSIDE)
+        # Case 2: First appearance in ROI (UNKNOWN → INSIDE) - cho trường hợp không có ROI config
         is_entry = (
-            self.state == ROIState.OUTSIDE and 
-            new_state == ROIState.INSIDE
+            (self.state == ROIState.OUTSIDE and new_state == ROIState.INSIDE) or
+            (self.state == ROIState.UNKNOWN and new_state == ROIState.INSIDE)
         )
         
         # Update state

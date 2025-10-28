@@ -53,7 +53,8 @@ class StoplineCrossingDetector:
         distance = y2 - stopline_y
         
         # Check: y2 >= stopline VÀ trong vùng detection_range
-        if y2 >= stopline_y and abs(distance) <= self.detection_range:
+        # distance >= 0 (đã vượt) VÀ distance <= range (còn trong vùng)
+        if stopline_y <= y2 <= stopline_y + self.detection_range:
             self.tracks[track_id]["crossed"] = True
             logger.info(f"📹 [Stopline Crossing] Track {track_id}: y2={y2:.1f}px, stopline={stopline_y:.1f}px, distance={distance:.1f}px")
             return True

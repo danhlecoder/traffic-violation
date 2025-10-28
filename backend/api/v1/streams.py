@@ -7,23 +7,30 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
-from ..core.streaming.mjpeg import generate_mjpeg
-from ..utils.database import get_db
-from ..utils.logger import app_logger as logger
+from ...core.streaming.mjpeg import generate_mjpeg
+from ...clients.mongodb_service import get_mongodb_service
+from ...utils.logger import app_logger as logger
+from ...core.analysis.density import get_vehicle_density_info, get_vehicle_count
 
 
 router = APIRouter()
 
 
-@router.get("/api/stream")
+@router.get("/stream")
 def stream(
     rtsp: Optional[str] = Query(None, alias="src", description="URL nguồn RTSP/HTTP"),
-    fps: int = Query(30, ge=1, le=60, description="FPS mục tiêu"),
-    quality: int = Query(80, ge=10, le=95, description="Chất lượng JPEG"),
+    fps: Optional[int] = Query(None, ge=1, le=60, description="FPS mục tiêu (None = dùng settings)"),
+    quality: Optional[int] = Query(None, ge=10, le=95, description="Chất lượng JPEG (None = dùng settings)"),
     detection: bool = Query(True, description="Bật/tắt YOLO detection")
 ):
     """
-    MJPEG stream từ nguồn RTSP/HTTP với YOLO detection
+    Endpoint trả về MJPEG stream từ RTSP/HTTP source
+    
+    Headers để tránh timeout:
+    - Connection: keep-alive
+    - Keep-Alive: timeout=300
+    
+    MJPEG stream từ nguồn RTSP/HTTP với YOLO detection (via API)
     """
     if not rtsp:
         logger.warning("Thiếu tham số 'src' (RTSP URL)")
@@ -35,15 +42,23 @@ def stream(
     try:
         logger.info(f"Bắt đầu stream từ: {rtsp} (FPS={fps}, Quality={quality}, Detection={detection})")
 
-        # Lấy ROI, stopline và camera info từ database
+        # Lấy camera info từ MongoDB API
         roi = None
         stopline = None
         camera_id = None
         camera_name = None
         location = None
         try:
-            db = get_db()
-            camera_doc = db.cameras.find_one({'rtsp': rtsp})
+            service = get_mongodb_service()
+            cameras = service.get_cameras()
+            
+            # Find camera by RTSP URL
+            camera_doc = None
+            for cam in cameras:
+                if cam.get('rtsp') == rtsp:
+                    camera_doc = cam
+                    break
+            
             if camera_doc:
                 logger.info(f"✓ Tìm thấy camera trong DB cho rtsp: {rtsp}")
                 camera_id = camera_doc.get('id')
@@ -58,13 +73,12 @@ def stream(
                         roi = regions['roi']
                         logger.info(f"✓ Đã load ROI cho camera {camera_id}: {len(roi)} điểm")
                     else:
-                        logger.warning(f"✗ Camera {camera_id} KHÔNG có ROI trong DB!")
+                        logger.warning(f"⚠️  Camera {camera_id} KHÔNG có ROI - sẽ track TOÀN BỘ khung hình")
 
-                    # Load stopline - Format từ frontend: [{"x": 0, "y": 0.66}, {"x": 1, "y": 0.66}]
+                    # Load stopline
                     if regions.get('stopLine'):
                         raw_stopline = regions['stopLine']
 
-                        # stopLine là list của 2 points → lấy y từ point đầu
                         if isinstance(raw_stopline, list) and len(raw_stopline) > 0:
                             first_point = raw_stopline[0]
                             if isinstance(first_point, dict) and "y" in first_point:
@@ -77,7 +91,6 @@ def stream(
                             else:
                                 logger.error(f"Stopline point format sai: {first_point}")
 
-                        # Fallback: dict format
                         elif isinstance(raw_stopline, dict) and "y" in raw_stopline:
                             y_value = float(raw_stopline["y"])
                             stopline = {
@@ -89,7 +102,9 @@ def stream(
                         else:
                             logger.error(f"Stopline format không đúng: {type(raw_stopline)}, value={raw_stopline}")
                     else:
-                        logger.warning(f"Camera {camera_id} KHÔNG có stopLine config!")
+                        logger.info(f"⚠️  Camera {camera_id} KHÔNG có stopLine - chỉ detect ROI entry violations")
+                else:
+                    logger.warning(f"⚠️  Camera {camera_id} KHÔNG có regions config - sẽ track TOÀN BỘ và không detect stopline")
             else:
                 logger.warning(f"✗ KHÔNG tìm thấy camera trong DB cho rtsp: {rtsp}")
         except Exception as e:
@@ -110,12 +125,38 @@ def stream(
 
         return StreamingResponse(
             generator,
-            media_type="multipart/x-mixed-replace; boundary=frame"
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Connection": "keep-alive",
+                "Keep-Alive": "timeout=300, max=1000",
+                "X-Accel-Buffering": "no"  # Disable nginx buffering
+            }
         )
 
     except Exception as e:
         logger.error(f"Lỗi khi tạo stream: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Lỗi khi tạo stream: {str(e)}"
+            detail=f"Không thể stream: {str(e)}"
         )
+
+
+@router.get("/stream/density")
+def get_stream_density(src: str = Query(..., description="URL nguồn RTSP/HTTP")):
+    """
+    Lấy mật độ phương tiện hiện tại của stream
+    
+    Returns:
+        {
+            "count": 5,
+            "level": "low" | "medium" | "high",
+            "description": "Thưa"
+        }
+    """
+    try:
+        vehicle_count = get_vehicle_count(src)
+        return get_vehicle_density_info(vehicle_count)
+    except Exception as e:
+        logger.error(f"Lỗi lấy density: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

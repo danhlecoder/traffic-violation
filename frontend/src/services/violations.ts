@@ -38,7 +38,7 @@ export async function getViolations(params?: {
   if (params?.limit) query.append('limit', params.limit.toString())
   if (params?.offset) query.append('offset', params.offset.toString())
   
-  const response = await apiClient.get<ViolationAPIResponse>(`/api/violations?${query.toString()}`)
+  const response = await apiClient.get<ViolationAPIResponse>(`/v1/violations?${query.toString()}`)
   return response
 }
 

@@ -7,13 +7,17 @@ pydantic==2.10.6
 opencv-python-headless==4.12.0.88
 numpy==2.2.6
 
-# === YOLO DETECTION ===
-ultralytics==8.3.62
-torch>=2.0.0
-torchvision>=0.15.0
+# === HTTP CLIENT (gọi YOLO + MongoDB API) ===
+requests==2.31.0
 
-# === DATABASE ===
-pymongo==4.9.2
+# === YOLO DETECTION (MOVED TO yolo-service) ===
+# All detection via API calls
+# torch==2.5.1
+# torchvision==0.20.1  
+# ultralytics==8.3.48
+
+# === DATABASE (MOVED TO mongo-service) ===
+# pymongo==4.9.2
 
 # === UTILITIES ===
 python-dotenv==1.0.1

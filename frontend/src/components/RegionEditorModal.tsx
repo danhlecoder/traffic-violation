@@ -126,7 +126,7 @@ export default function RegionEditorModal({
         }
       }
 
-      // Dùng CHÍNH ảnh đang hiển thị: chuyển blob -> data URL nếu cần và POST lên /api/detect/stopline
+      // Dùng CHÍNH ảnh đang hiển thị: chuyển blob -> data URL nếu cần và POST lên /v1/detection/stopline
       let dataUrlLocal: string | null = null
       if (imageSrc) {
         if (imageSrc.startsWith('data:image/')) {
@@ -146,7 +146,7 @@ export default function RegionEditorModal({
 
       if (!dataUrlLocal) throw new Error('Không có ảnh để detect')
 
-      resp = await fetch(`${streamSvc.getApiBase()}/api/detect/stopline`, {
+      resp = await fetch(`${streamSvc.getApiBase()}/v1/detection/stopline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUrlLocal }),

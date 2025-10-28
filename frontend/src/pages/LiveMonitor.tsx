@@ -63,21 +63,38 @@ export default function LiveMonitor() {
       try {
         const response = await getViolations({ limit: 100, status: 'detected' })
         
-        const violationsFromAPI: Violation[] = response.data.map((v) => ({
+        // Map backend violation_type to frontend type
+        const mapViolationType = (backendType: string): ViolationType => {
+          switch (backendType) {
+            case 'red_light_violation':
+              return 'Vượt đèn đỏ'
+            case 'stopline_crossing':
+              return 'Vượt đèn đỏ'
+            case 'speeding':
+              return 'Quá tốc độ'
+            case 'no_helmet':
+              return 'Không đội mũ'
+            case 'roi_entry':
+            default:
+              return 'Vượt đèn đỏ' // Default to red light violation instead of generic
+          }
+        }
+
+        const violationsFromAPI: Violation[] = (response.data || []).map((v) => ({
           id: v.id,
           time: v.timestamp,
           cameraId: v.camera_id,
           cameraName: v.camera_name || `Camera ${v.camera_id}`,
           location: v.location || 'Không rõ',
           vehicleType: v.vehicle_type,
-          plate: v.license_plate,
+          plate: v.license_plate || '',
           confidence: v.confidence,
-          type: 'Phát hiện',
+          type: mapViolationType(v.violation_type),
           status: 'Mới',
           images: {
-            overview: v.images.full_frame || '',
-            vehicle: v.images.vehicle_crop || '',
-            plate: v.images.plate_crop || '',
+            overview: v.images?.full_frame || '',
+            vehicle: v.images?.vehicle_crop || '',
+            plate: v.images?.plate_crop || '',
           },
         }))
         

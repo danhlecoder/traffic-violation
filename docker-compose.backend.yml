@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: traffic_backend
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ./backend/models:/app/backend/models:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - ./backend/.env
+    networks:
+      - traffic_net
+
+networks:
+  traffic_net:
+    driver: bridge

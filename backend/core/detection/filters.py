@@ -1,5 +1,5 @@
-"""
-Detection Filters - Lọc detections theo ROI và logic nghiệp vụ
+"""  
+Bộ Lọc Detection - Lọc Detections Theo ROI Và Logic Nghiệp Vụ
 """
 
 from typing import List, Dict, Any, Optional
@@ -31,7 +31,7 @@ def is_bbox_in_roi(bbox: List[float], roi: List[Dict[str, float]], img_width: in
     # Chuyển ROI từ normalized về pixel
     roi_pixels = np.array([[p['x'] * img_width, p['y'] * img_height] for p in roi], dtype=np.int32)
     
-    # Kiểm tra point in polygon
+    # Kiểm tra điểm nằm trong polygon
     result = cv2.pointPolygonTest(roi_pixels, (center_x, center_y), False)
     return result >= 0
 
@@ -110,7 +110,7 @@ def filter_detections_by_roi(
     # 1. Đèn giao thông: Luôn hiển thị
     filtered.extend(lights)
     
-    # 2. Vehicles: Filter theo ROI (nếu có)
+    # 2. Xe: Lọc theo ROI (nếu có)
     if roi and len(roi) >= 3:
         vehicles_in_roi = []
         for det in vehicles:
@@ -145,7 +145,7 @@ def filter_detections_by_roi(
                 filtered.append(helmet)
                 break
     
-    # 5. Others: Filter theo ROI (nếu có)
+    # 5. Khác: Lọc theo ROI (nếu có)
     if roi and len(roi) >= 3:
         for det in others:
             bbox = det.get("bbox")

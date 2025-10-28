@@ -8,6 +8,7 @@ Chức năng:
 
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
+import cv2
 
 from ...utils.image import crop_bbox, encode_image_base64
 from ...utils.logger import app_logger as logger
@@ -65,8 +66,39 @@ def create_violation_record(
         bbox = vehicle_det["bbox"]
         confidence = vehicle_det["confidence"]
 
-        # Encode ảnh toàn cảnh
-        full_frame_b64 = encode_image_base64(frame, quality=100)
+        # Tạo bản copy của frame để vẽ text (không ảnh hưởng frame gốc)
+        frame_with_text = frame.copy()
+        
+        # Vẽ thông tin vị trí và thời gian ở góc trái trên
+        if location or camera_name:
+            # Vị trí (dòng 1)
+            text_location = location or camera_name or "Unknown"
+            cv2.putText(
+                frame_with_text,
+                text_location,
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA
+            )
+            
+            # Thời gian (dòng 2) - Giờ Việt Nam (UTC+7)
+            current_time = datetime.now(VIETNAM_TZ).strftime("%d-%m-%Y %H:%M:%S")
+            cv2.putText(
+                frame_with_text,
+                current_time,
+                (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA
+            )
+
+        # Encode ảnh toàn cảnh (đã có text)
+        full_frame_b64 = encode_image_base64(frame_with_text, quality=100)
         if not full_frame_b64:
             return None
 
@@ -78,12 +110,19 @@ def create_violation_record(
         plate_crop_b64 = None
         plate_text = None
         if plate_det:
+            logger.info(f"✓ Có plate detection, bbox: {plate_det.get('bbox')}")
             plate_crop = crop_bbox(frame, plate_det["bbox"], padding=5)
             if plate_crop is not None:
+                logger.info(f"✓ Plate crop OK, shape: {plate_crop.shape}")
                 # OCR biển số
                 plate_text = recognize_plate_text(plate_crop)
+                logger.info(f"OCR result: {plate_text if plate_text else 'None'}")
                 # Encode ảnh gốc
                 plate_crop_b64 = encode_image_base64(plate_crop, quality=95)
+            else:
+                logger.warning("❌ Plate crop failed (None)")
+        else:
+            logger.warning("❌ Không có plate detection")
 
         # Tạo record - chỉ thông tin cần thiết
         violation = {

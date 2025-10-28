@@ -13,10 +13,10 @@ logging:
   max_bytes: 10485760  # 10MB
   backup_count: 5
 
-# YOLO Model
-yolo:
-  model_path: /app/backend/models/best1.pt
-  device: cpu
+# External Services (Docker network internal)
+services:
+  yolo_api: "http://yolo:8001"
+  mongo_api: "http://mongo_api:8002"
   
 # License Plate Text Recognition (YOLO Character Detection)
 license_plate:
@@ -25,11 +25,20 @@ license_plate:
   iou_threshold: 0.6
 
 # Database
+# Để chạy trên server riêng, đổi host thành IP server MongoDB
+# VD: host: "192.168.1.100" hoặc "mongodb.example.com"
 database:
   mongo_camera:
-    host: mongo
+    host: mongo  # Đổi thành IP/domain của MongoDB server
     port: 27017
     database: traffic
     username: ""
     password: ""
     authSource: admin
+
+# External Services (khi deploy distributed)
+# Uncomment và config khi chạy trên nhiều server
+# services:
+#   frontend_url: "http://192.168.1.101:3000"  # Frontend server
+#   backend_url: "http://192.168.1.102:8000"   # Backend server (YOLO AI)
+#   mongo_url: "mongodb://192.168.1.103:27017" # MongoDB server

@@ -5,13 +5,15 @@ Stopline Detection API - Phát hiện vạch dừng từ ảnh
 import base64
 import numpy as np
 import cv2
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..core.analysis.stopline import detect_stop_line_with_fallback, calculate_lineB_from_stopline, calculate_roi_from_lineB
-from ..utils.image import center_crop_to_16_9
-from ..utils.logger import app_logger as logger
+from ...core.analysis.stopline import detect_stop_line_with_fallback, calculate_lineB_from_stopline, calculate_roi_from_lineB
+from ...utils.image import center_crop_to_16_9
+from ...utils.logger import app_logger as logger
+from ...clients.mongodb_service import get_mongodb_service
 
 
 router = APIRouter()
@@ -20,12 +22,14 @@ router = APIRouter()
 class DetectImagePayload(BaseModel):
     """Schema cho request detect stopline từ ảnh"""
     image: str  # Base64 hoặc Data URL
+    camera_id: Optional[str] = None  # Nếu có, sẽ tự động lưu vào DB
+    save_to_db: bool = False  # Tự động lưu regions vào DB
 
 
-@router.post("/api/detect/stopline")
+@router.post("/detection/stopline")
 def detect_stopline_from_image(payload: DetectImagePayload):
     """
-    Tự động detect vạch dừng
+    Tự động phát hiện vạch dừng từ ảnh camera
     """
     try:
         data = payload.image.strip()
@@ -108,6 +112,29 @@ def detect_stopline_from_image(payload: DetectImagePayload):
                 logger.error(f"Lỗi khi tính lineB: {e}")
         else:
             logger.info("Không phát hiện được vạch dừng")
+
+        # Tự động lưu vào DB nếu được yêu cầu
+        if payload.save_to_db and payload.camera_id and (response["stopLine"] or response["lineB"] or response["roi"]):
+            try:
+                service = get_mongodb_service()
+                regions = {}
+                if response["stopLine"]:
+                    regions["stopLine"] = response["stopLine"]
+                if response["lineB"]:
+                    regions["lineB"] = response["lineB"]
+                if response["roi"]:
+                    regions["roi"] = response["roi"]
+                
+                success = service.update_camera_regions(payload.camera_id, regions)
+                if success:
+                    logger.info(f"✓ Đã lưu regions vào DB cho camera {payload.camera_id}")
+                    response["saved_to_db"] = True
+                else:
+                    logger.warning(f"Không thể lưu regions cho camera {payload.camera_id}")
+                    response["saved_to_db"] = False
+            except Exception as e:
+                logger.error(f"Lỗi khi lưu regions vào DB: {e}")
+                response["saved_to_db"] = False
 
         return response
 

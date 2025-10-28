@@ -60,7 +60,7 @@ export default function CameraTile({
       ctx.drawImage(img, 0, 0, w, h)
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
       const apiBase = (import.meta as any)?.env?.VITE_API_BASE || `${window.location.protocol}//${window.location.hostname}:8000`
-      const resp = await fetch(`${apiBase}/api/detect/stopline`, {
+      const resp = await fetch(`${apiBase}/v1/detection/stopline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUrl }),

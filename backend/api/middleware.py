@@ -1,5 +1,5 @@
 """
-FastAPI Middleware Configuration
+Cấu Hình Middleware FastAPI
 """
 
 from fastapi import FastAPI
@@ -10,7 +10,7 @@ from ..config.config import settings
 
 def setup_cors(app: FastAPI) -> None:
     """
-    Configure CORS middleware
+    Cấu hình CORS middleware
     """
     origins_env = settings.ALLOWED_ORIGINS
     allow_all = origins_env.strip() == "*"
