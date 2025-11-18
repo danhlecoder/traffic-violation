@@ -1,0 +1,453 @@
+{
+  "name": "chat discord",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "violation-confirmed",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -688,
+        64
+      ],
+      "id": "a8458c7d-64c5-4adf-ace7-aba60563d766",
+      "name": "Webhook",
+      "webhookId": "b382ee2a-6bd2-4a45-9bb5-96bb24a3d593"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "full_frame_b64",
+        "binaryPropertyName": "full_frame",
+        "options": {
+          "fileName": "full_frame.jpg"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        -176
+      ],
+      "id": "c0e4e9eb-4ab1-4b16-a58e-88a1247421ae",
+      "name": "Full Frame",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "vehicle_crop_b64",
+        "binaryPropertyName": "vehicle_crop",
+        "options": {
+          "fileName": "vehicle_crop.jpg"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        16
+      ],
+      "id": "3404d106-a71d-4cbb-b11b-82bbfbfadf8f",
+      "name": "Vehicle Crop",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "plate_crop_b64",
+        "binaryPropertyName": "plate_crop",
+        "options": {
+          "fileName": "plate_crop.jpg"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        176
+      ],
+      "id": "54a8e726-b8a0-4057-80fb-e269521a4a7c",
+      "name": "Plate Crop",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        464,
+        -80
+      ],
+      "id": "ebb7d4a9-5ba2-4f6d-a8cb-b1eebfaef1fe",
+      "name": "Merge A"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        464,
+        336
+      ],
+      "id": "b6c2fe5c-9167-4d4f-aa7d-c6499fa6c7ce",
+      "name": "Merge B"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        0,
+        656
+      ],
+      "id": "95b7d24a-5c1b-4cbf-b8c9-c028d8f294ea",
+      "name": "Merge C"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=\n",
+        "options": {},
+        "embeds": {
+          "values": [
+            {
+              "inputMethod": "json",
+              "json": "={{ JSON.stringify($json.discord_message) }}\n"
+            }
+          ]
+        },
+        "files": {
+          "values": [
+            {
+              "inputFieldName": "full_frame"
+            },
+            {
+              "inputFieldName": "vehicle_crop"
+            },
+            {
+              "inputFieldName": "plate_crop"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        672,
+        528
+      ],
+      "id": "817bf95f-fc4e-4274-97cf-088d2402a038",
+      "name": "Discord",
+      "webhookId": "e93347b3-3657-46df-ac89-9a8e461d0322",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "C283yn6q213y49fW",
+          "name": "Discord Webhook account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "from typing import Any, Dict, List\nfrom datetime import datetime\n\ndef strip_data_url(s: Any) -> str | None:\n    \"\"\"Bỏ phần 'data:image/jpeg;base64,' và chỉ lấy phần base64 phía sau.\"\"\"\n    if not isinstance(s, str):\n        return None\n    parts = s.split(\",\", 1)\n    return parts[1] if len(parts) > 1 else parts[0]\n\n# Map tag → mô tả tiếng Việt với emoji\nTAG_LABELS: Dict[str, str] = {\n    \"speed_violation\": \"⚡ Vượt quá tốc độ\",\n    \"no_helmet\":       \"🪖 Không đội mũ bảo hiểm\",\n    \"red_light\":       \"🔴 Vượt đèn đỏ\",\n}\n\nUNKNOWN = \"Không xác định\"\n\nout: List[Dict[str, Any]] = []\n\nfor item in items:\n    json_data: Dict[str, Any] = item.get(\"json\", {})\n    body: Dict[str, Any] = json_data.get(\"body\") or json_data\n\n    v: Dict[str, Any] = {\n        \"timestamp\":        body.get(\"timestamp\"),\n        \"camera_id\":        body.get(\"camera_id\"),\n        \"camera_name\":      body.get(\"camera_name\"),\n        \"location\":         body.get(\"location\") or \"\",\n        \"vehicle_type\":     body.get(\"vehicle_type\"),\n        \"license_plate\":    body.get(\"license_plate\"),\n        \"violation_tags\":   body.get(\"violation_tags\") or [],\n        \"track_id\":         body.get(\"track_id\"),\n        \"speed\":            body.get(\"speed\"),\n        \"full_frame_b64\":   strip_data_url(body.get(\"images\", {}).get(\"full_frame\")),\n        \"vehicle_crop_b64\": strip_data_url(body.get(\"images\", {}).get(\"vehicle_crop\")),\n        \"plate_crop_b64\":   strip_data_url(body.get(\"images\", {}).get(\"plate_crop\")),\n    }\n\n    # ====== Format dữ liệu hiển thị ======\n\n    # Vị trí\n    location_raw = v[\"location\"] or \"\"\n    location_display = location_raw.strip() or UNKNOWN\n\n    # Thời gian\n    raw_ts = v[\"timestamp\"]\n    time_display = UNKNOWN\n    footer_time = \"\"\n\n    if isinstance(raw_ts, str):\n        try:\n            ts_norm = raw_ts.replace(\"Z\", \"+00:00\") if \"Z\" in raw_ts else raw_ts\n            dt = datetime.fromisoformat(ts_norm)\n            time_display = dt.strftime(\"%d/%m/%Y %H:%M:%S\")\n            footer_time = datetime.now().strftime(\"Hôm nay lúc %H:%M\")\n        except Exception:\n            time_display = raw_ts or UNKNOWN\n    elif raw_ts is not None:\n        time_display = str(raw_ts)\n    else:\n        time_display = UNKNOWN\n\n    # Biển số\n    plate_raw = v[\"license_plate\"]\n    if plate_raw is None or not str(plate_raw).strip():\n        plate_display = UNKNOWN\n    else:\n        plate_display = str(plate_raw).strip()\n\n    # Loại xe\n    vtype_raw = v[\"vehicle_type\"]\n    if vtype_raw is None:\n        vtype_display = UNKNOWN\n    else:\n        vtype_raw_str = str(vtype_raw)\n        vehicle_map = {\n            \"motorcycle\": \"🏍️ Xe máy\",\n            \"car\":        \"🚗 Ô tô\",\n            \"truck\":      \"🚚 Xe tải\",\n            \"bus\":        \"🚌 Xe buýt\"\n        }\n        vtype_display = vehicle_map.get(vtype_raw_str, vtype_raw_str.capitalize())\n\n    # Tốc độ – xử lý cả trường hợp \"jsnull\", \"null\", rỗng,...\n    speed_raw = v[\"speed\"]\n    if speed_raw is None:\n        speed_display = UNKNOWN\n    else:\n        s = str(speed_raw).strip()\n        if not s or s.lower() in (\"jsnull\", \"null\", \"none\", \"nan\"):\n            speed_display = UNKNOWN\n        else:\n            speed_display = f\"{s} km/h\"\n\n    # Vi phạm\n    tag_names = v[\"violation_tags\"] or []\n    violations: List[str] = []\n    for t in tag_names:\n        label = TAG_LABELS.get(t, t.replace(\"_\", \" \").capitalize())\n        violations.append(label)\n\n    if violations:\n        violation_text = \"\\n\".join(violations)\n    else:\n        violation_text = UNKNOWN\n\n    # Track ID\n    track_raw = v[\"track_id\"]\n    track_display = str(track_raw) if track_raw is not None else UNKNOWN\n\n    # ====== Tạo EMBED ======\n    footer_text = f\"ID: {track_display}\"\n    if footer_time:\n        footer_text += f\" • {footer_time}\"\n\n    discord_message = {\n        \"title\": \"🚨 XÁC NHẬN VI PHẠM GIAO THÔNG\",\n        \"color\": 15158332,\n        \"fields\": [\n            {\n                \"name\": \"📍 Vị trí\",\n                \"value\": location_display,\n                \"inline\": True,\n            },\n            {\n                \"name\": \"🕒 Thời gian\",\n                \"value\": time_display,\n                \"inline\": True,\n            },\n            {\n                \"name\": \"🚗 Phương tiện\",\n                \"value\": vtype_display,\n                \"inline\": True,\n            },\n            {\n                \"name\": \"🔢 Biển số\",\n                \"value\": plate_display,\n                \"inline\": True,\n            },\n            {\n                \"name\": \"🏁 Tốc độ\",\n                \"value\": speed_display,\n                \"inline\": True,\n            },\n            {\n                \"name\": \"⚠️ Loại vi phạm\",\n                \"value\": violation_text,\n                \"inline\": False,\n            },\n        ],\n        \"footer\": {\n            \"text\": footer_text,\n        },\n    }\n\n    out.append({\n        \"json\": {\n            **v,\n            \"discord_message\": discord_message,\n        }\n    })\n\nreturn out\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        64
+      ],
+      "id": "a979c985-f722-4cd7-9aa2-8e3cb9917901",
+      "name": "Code in Python (Beta)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "025df159-6ad7-4ea5-987f-294e281aa8d7",
+              "leftValue": "={{ $json.plate_crop_b64 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -64,
+        336
+      ],
+      "id": "fc461602-d1b4-46f9-9cad-48cceb0e81ed",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=\n",
+        "options": {},
+        "embeds": {
+          "values": [
+            {
+              "inputMethod": "json",
+              "json": "={{ JSON.stringify($json.discord_message) }}\n"
+            }
+          ]
+        },
+        "files": {
+          "values": [
+            {
+              "inputFieldName": "full_frame"
+            },
+            {
+              "inputFieldName": "vehicle_crop"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        672,
+        736
+      ],
+      "id": "e9c8a0af-5da0-43fa-9b7c-bfb14504ab01",
+      "name": "Discord1",
+      "webhookId": "e93347b3-3657-46df-ac89-9a8e461d0322",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "C283yn6q213y49fW",
+          "name": "Discord Webhook account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "025df159-6ad7-4ea5-987f-294e281aa8d7",
+              "leftValue": "={{ $json.plate_crop_b64 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        304,
+        656
+      ],
+      "id": "aff17096-cac0-4f82-98a5-d99e3095497c",
+      "name": "If1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in Python (Beta)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Full Frame": {
+      "main": [
+        [
+          {
+            "node": "Merge A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plate Crop": {
+      "main": [
+        [
+          {
+            "node": "Merge B",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Vehicle Crop": {
+      "main": [
+        [
+          {
+            "node": "Merge A",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge A": {
+      "main": [
+        [
+          {
+            "node": "Merge B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge B": {
+      "main": [
+        [
+          {
+            "node": "Merge C",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge C": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in Python (Beta)": {
+      "main": [
+        [
+          {
+            "node": "Vehicle Crop",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Full Frame",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge C",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Plate Crop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge B",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Discord1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1f147694-eb05-4e5c-b1c2-0ca1a5f8ea3f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "14a988eed27ad07c163f6cc7c37e73bc6cbc0dd0683d753bdd4ce01b4453558d"
+  },
+  "id": "FN4Bg9dtthC2EnhP",
+  "tags": []
+}

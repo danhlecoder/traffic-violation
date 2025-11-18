@@ -7,10 +7,9 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class CameraRegion(BaseModel):
-    """Camera regions configuration (stopline, ROI)"""
+    """Camera regions configuration (stopline only)"""
     stopLine: Optional[List[dict]] = Field(None, description="Stopline [{'x': float, 'y': float}, ...]")
-    lineB: Optional[List[dict]] = Field(None, description="LineB [{'x': float, 'y': float}, ...]")
-    roi: Optional[List[dict]] = Field(None, description="ROI polygon [{'x': float, 'y': float}, ...]")
+    lineB: Optional[List[dict]] = Field(None, description="Line B song song với stopline, cách 1m (ppm) về phía trên")
 
 
 class Camera(BaseModel):
@@ -20,7 +19,7 @@ class Camera(BaseModel):
     rtsp: str = Field(..., description="RTSP URL")
     location: Optional[str] = Field(None, description="Camera location")
     regions: Optional[CameraRegion] = Field(None, description="Configured regions")
-    
+
     @field_validator('rtsp')
     def validate_rtsp(cls, v):
         """Ensure RTSP URL is provided"""

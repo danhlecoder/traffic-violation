@@ -15,14 +15,21 @@ logging:
 
 # External Services (Docker network internal)
 services:
-  yolo_api: "http://yolo:8001"
   mongo_api: "http://mongo_api:8002"
-  
-# License Plate Text Recognition (YOLO Character Detection)
+
+# YOLO Vehicle Detection (Local Model)
+yolo_vehicle:
+  model_path: /app/backend/models/best1.pt
+  conf_threshold: 0.5
+  iou_threshold: 0.45
+  device: auto  # auto: dùng CUDA nếu có, không thì CPU
+
+# License Plate OCR (Local Model)
 license_plate:
-  model_path: /app/backend/models/license_plate.pt
+  model_path: /app/backend/models/number_license_model.pt
   conf_threshold: 0.35
   iou_threshold: 0.6
+  device: auto  # auto: dùng CUDA nếu có, không thì CPU
 
 # Database
 # Để chạy trên server riêng, đổi host thành IP server MongoDB

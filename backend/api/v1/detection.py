@@ -10,10 +10,10 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ...core.analysis.stopline import detect_stop_line_with_fallback, calculate_lineB_from_stopline, calculate_roi_from_lineB
+from ...core.analysis.stopline import detect_stop_line_with_fallback
 from ...utils.image import center_crop_to_16_9
 from ...utils.logger import app_logger as logger
-from ...clients.mongodb_service import get_mongodb_service
+from ..clients.mongodb_service import get_mongodb_service
 
 
 router = APIRouter()
@@ -77,7 +77,7 @@ def detect_stopline_from_image(payload: DetectImagePayload):
             stopline_result = None
 
         # Trả về kết quả
-        response = {"stopLine": None, "lineB": None, "roi": None}
+        response = {"stopLine": None}
 
         if stopline_result:
             (x1, y1), (x2, y2) = stopline_result
@@ -86,45 +86,17 @@ def detect_stopline_from_image(payload: DetectImagePayload):
                 {"x": float(x2), "y": float(y2)},
             ]
             logger.info(f"✓ Phát hiện vạch dừng: {response['stopLine']}")
-
-            # Tính lineB từ stopLine
-            try:
-                import os
-                offset_px = int(os.getenv('LINE_B_OFFSET_PX', '64'))
-                h, w = det_frame.shape[:2]
-                lineB_result = calculate_lineB_from_stopline(stopline_result, h, offset_px=offset_px)
-                (bx1, by1), (bx2, by2) = lineB_result
-                response["lineB"] = [
-                    {"x": float(bx1), "y": float(by1)},
-                    {"x": float(bx2), "y": float(by2)},
-                ]
-                logger.info(f"✓ Tính lineB thành công: {response['lineB']}")
-
-                # Tính ROI từ lineB
-                try:
-                    roi_result = calculate_roi_from_lineB(lineB_result)
-                    response["roi"] = [{"x": float(px), "y": float(py)} for px, py in roi_result]
-                    logger.info(f"✓ Tính ROI từ lineB: y_top={roi_result[0][1]:.3f}, points={len(response['roi'])}")
-                except Exception as e:
-                    logger.error(f"Lỗi khi tính ROI: {e}")
-
-            except Exception as e:
-                logger.error(f"Lỗi khi tính lineB: {e}")
         else:
             logger.info("Không phát hiện được vạch dừng")
 
         # Tự động lưu vào DB nếu được yêu cầu
-        if payload.save_to_db and payload.camera_id and (response["stopLine"] or response["lineB"] or response["roi"]):
+        if payload.save_to_db and payload.camera_id and response["stopLine"]:
             try:
                 service = get_mongodb_service()
                 regions = {}
                 if response["stopLine"]:
                     regions["stopLine"] = response["stopLine"]
-                if response["lineB"]:
-                    regions["lineB"] = response["lineB"]
-                if response["roi"]:
-                    regions["roi"] = response["roi"]
-                
+
                 success = service.update_camera_regions(payload.camera_id, regions)
                 if success:
                     logger.info(f"✓ Đã lưu regions vào DB cho camera {payload.camera_id}")
@@ -142,4 +114,110 @@ def detect_stopline_from_image(payload: DetectImagePayload):
         raise
     except Exception as e:
         logger.error(f"Lỗi khi xử lý detect stopline: {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi server: {str(e)}")
+
+
+class DetectPlatePayload(BaseModel):
+    """Schema cho request detect plate từ vehicle crop image"""
+    image: str  # Base64 hoặc Data URL của vehicle crop
+    camera_id: Optional[str] = None  # Để lấy detection_rules
+
+
+@router.post("/detection/plate")
+def detect_plate_from_vehicle_crop(payload: DetectPlatePayload):
+    """
+    Tự động phát hiện và OCR biển số từ ảnh phương tiện (vehicle crop)
+    """
+    try:
+        data = payload.image.strip()
+
+        # Xử lý data URL
+        if data.startswith("data:"):
+            try:
+                data = data.split(",", 1)[1]
+            except Exception:
+                raise HTTPException(status_code=400, detail="Data URL không hợp lệ")
+
+        # Decode base64
+        try:
+            jpg_bytes = base64.b64decode(data, validate=False)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Base64 không hợp lệ")
+
+        # Decode image
+        buffer = np.frombuffer(jpg_bytes, dtype=np.uint8)
+        vehicle_crop = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+
+        if vehicle_crop is None:
+            raise HTTPException(status_code=400, detail="Không thể giải mã ảnh")
+
+        # Lấy minConfidence từ camera detection_rules (nếu có)
+        min_confidence = None
+        if payload.camera_id:
+            try:
+                service = get_mongodb_service()
+                camera = service.get_camera(payload.camera_id)
+                if camera and camera.get("detection_rules") and camera["detection_rules"].get("minConfidence"):
+                    min_confidence = float(camera["detection_rules"]["minConfidence"])
+            except Exception as e:
+                logger.debug(f"Không lấy được detection_rules từ camera {payload.camera_id}: {e}")
+
+        # Detect plate trên vehicle crop
+        try:
+            from ...core.detection.yolo import get_yolo_detector
+            from ...core.license_plate.detector import recognize_plate_text
+            from ...utils.image import encode_image_base64
+            from ...config.config import settings
+
+            detector = get_yolo_detector()
+
+            # Fallback về settings nếu không có min_confidence từ camera
+            if min_confidence is None:
+                min_confidence = settings.YOLO_CONFIDENCE
+
+            # Detect trực tiếp trên vehicle_crop (đã là crop rồi)
+            crop_detections = detector.detect(vehicle_crop, conf=min_confidence)
+
+            # Tìm license_plate trong detections
+            plate_det = None
+            for det in crop_detections:
+                if det.get("class_name") == "license_plate":
+                    plate_det = det
+                    break
+
+            if plate_det:
+                # Crop plate từ vehicle crop
+                plate_bbox = plate_det["bbox"]
+                px1, py1, px2, py2 = map(int, plate_bbox)
+                px1, py1 = max(0, px1), max(0, py1)
+                px2, py2 = min(vehicle_crop.shape[1], px2), min(vehicle_crop.shape[0], py2)
+                plate_crop = vehicle_crop[py1:py2, px1:px2]
+
+                if plate_crop.size > 0:
+                    # OCR biển số
+                    plate_text = recognize_plate_text(plate_crop)
+
+                    # Encode ảnh plate crop
+                    plate_crop_b64 = encode_image_base64(plate_crop, quality=95)
+
+                    logger.info(f"✓ Detect plate từ vehicle crop: {plate_text if plate_text else 'Không đọc được'}")
+
+                    return {
+                        "success": True,
+                        "plate_text": plate_text,
+                        "plate_crop": plate_crop_b64,
+                        "bbox": plate_bbox
+                    }
+                else:
+                    return {"success": False, "message": "Plate crop empty"}
+            else:
+                return {"success": False, "message": "Không detect được plate"}
+        except Exception as e:
+            logger.error(f"Lỗi khi detect plate: {e}")
+            raise HTTPException(status_code=500, detail=f"Lỗi detect plate: {str(e)}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Lỗi khi xử lý detect plate: {e}")
         raise HTTPException(status_code=500, detail=f"Lỗi server: {str(e)}")

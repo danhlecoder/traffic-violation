@@ -10,63 +10,97 @@ from ...config.config import settings
 
 class StoplineCrossingDetector:
     """Theo dõi xe vượt stopline để ghi hình"""
-    
+
     def __init__(self, camera_id: str):
         """
         Args:
             camera_id: ID camera
         """
         self.camera_id = camera_id
-        self.threshold = settings.STOPLINE_CROSSING_THRESHOLD
         self.detection_range = settings.STOPLINE_DETECTION_RANGE
         self.cleanup_timeout = settings.STOPLINE_CROSSING_TIMEOUT
-        
-        # Track state: {track_id: {"crossed": bool, "last_seen": timestamp}}
-        self.tracks: Dict[int, Dict] = {}
-        
-        logger.info(f"StoplineCrossingDetector init: camera={camera_id}, threshold={self.threshold}px, range={self.detection_range}px")
-    
-    def check_crossing(self, track_id: int, bbox: Tuple[float, float, float, float], stopline_y: float) -> bool:
+
+        # Track state: {track_id: {"position": "above"/"below", "crossed": bool, "last_seen": timestamp}}
+        # position: "above" = y2 < stopline_y (xe ở trên stopline), "below" = y2 >= stopline_y (xe ở dưới stopline)
+        # track_id format: string (5 ký tự alphanumeric + hhmmss)
+        self.tracks: Dict[str, Dict] = {}
+
+        logger.info(f"StoplineCrossingDetector init: camera={camera_id}, range={self.detection_range}px")
+
+    def check_crossing(self, track_id: str, bbox: Tuple[float, float, float, float], stopline_y: float) -> bool:
         """
-        Check xe vượt stopline để ghi hình
-        
+        Check xe vượt stopline để ghi hình - REAL-TIME
+
         Logic:
-        - y2 >= stopline_y: xe đã vượt
-        - abs(y2 - stopline_y) <= detection_range: trong vùng ghi hình
-        - Mỗi track chỉ ghi 1 lần
-        
+        - y2 (tọa độ đáy bbox) >= và <= lineStop (nằm trong vùng STOPLINE_DETECTION_RANGE)
+        - Vùng detection: stopline_y ± detection_range (tổng 2*detection_range, lineStop là trung tâm)
+        - Ghi nhận NGAY khi xe vào vùng detection (không cần chờ chuyển trạng thái)
+        - Mỗi track chỉ ghi 1 lần để tránh duplicate
+
         Returns:
-            True nếu cần ghi hình (lần đầu vượt)
+            True nếu cần ghi hình (xe đang trong vùng detection range)
         """
-        _, _, _, y2 = bbox
-        
-        # Init track
-        if track_id not in self.tracks:
-            self.tracks[track_id] = {"crossed": False, "last_seen": time.time()}
-        
-        self.tracks[track_id]["last_seen"] = time.time()
-        
-        # Đã ghi rồi → skip
-        if self.tracks[track_id]["crossed"]:
-            return False
-        
+        x1, y1, x2, y2 = bbox
         distance = y2 - stopline_y
-        
-        # Check: y2 >= stopline VÀ trong vùng detection_range
-        # distance >= 0 (đã vượt) VÀ distance <= range (còn trong vùng)
-        if stopline_y <= y2 <= stopline_y + self.detection_range:
-            self.tracks[track_id]["crossed"] = True
-            logger.info(f"📹 [Stopline Crossing] Track {track_id}: y2={y2:.1f}px, stopline={stopline_y:.1f}px, distance={distance:.1f}px")
+
+        # Vùng detection: stopline_y ± detection_range (lineStop là trung tâm)
+        # Ví dụ: stopline_y=480, range=60 → vùng=[420-540] (tổng 120px)
+        detection_min = stopline_y - self.detection_range
+        detection_max = stopline_y
+        is_in_range = detection_min <= y2 <= detection_max
+
+        # Init track nếu chưa có
+        if track_id not in self.tracks:
+            self.tracks[track_id] = {
+                "crossed": False,
+                "last_seen": time.time()
+            }
+            logger.debug(f"🆕 Track {track_id} initialized: y2={y2:.1f}, stopline={stopline_y:.1f}, range=[{detection_min:.0f}-{detection_max:.0f}]")
+
+        track_state = self.tracks[track_id]
+        track_state["last_seen"] = time.time()
+
+        # LOG chi tiết mỗi 5 lần để giảm log overhead (giữ real-time nhưng không spam)
+        # Dùng hash để check modulo với string track_id
+        track_id_for_log = hash(track_id) % 1000
+
+        if track_id_for_log % 5 == 0 or is_in_range:
+            logger.info(
+                f"🔍 Track {track_id}: y2={y2:.1f}px, stopline={stopline_y:.1f}px, "
+                f"distance={distance:+.1f}px, "
+                f"vùng=[{detection_min:.0f}-{detection_max:.0f}] (chỉ phía trên stopline), "
+                f"in_range={is_in_range}, crossed={track_state.get('crossed', False)}"
+            )
+
+        # ĐIỀU KIỆN PHÁT HIỆN: Xe trong vùng detection range (y2 >= và <= lineStop trong ±detection_range)
+        # Ghi nhận NGAY khi thỏa điều kiện, không cần chờ chuyển trạng thái
+        if is_in_range:
+            # Đã ghi rồi → skip (tránh duplicate)
+            if track_state["crossed"]:
+                logger.debug(f"⏭️ Track {track_id} đã được ghi nhận trước đó, bỏ qua")
+                return False
+
+            track_state["crossed"] = True
+            logger.info(
+                f"✅ [VIOLATION DETECTED] Track {track_id} TRONG VÙNG DETECTION → Ghi nhận ngay! "
+                f"(y2={y2:.1f}px, stopline={stopline_y:.1f}px, distance={distance:+.1f}px, "
+                f"vùng=[{detection_min:.0f}-{detection_max:.0f}])"
+            )
             return True
-        
+        else:
+            logger.debug(
+                f"❌ Track {track_id} NGOÀI vùng detection "
+                f"(y2={y2:.1f}px, vùng=[{detection_min:.0f}-{detection_max:.0f}])"
+            )
+
         return False
-    
+
     def cleanup_old_tracks(self):
         """Xóa tracks cũ"""
         current_time = time.time()
-        to_remove = [tid for tid, state in self.tracks.items() 
+        to_remove = [tid for tid, state in self.tracks.items()
                      if current_time - state["last_seen"] > self.cleanup_timeout]
-        
+
         for track_id in to_remove:
             del self.tracks[track_id]
 

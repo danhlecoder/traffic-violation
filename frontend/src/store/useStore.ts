@@ -7,6 +7,7 @@ export type ViolationStatus = 'Mới' | 'Đã xác nhận' | 'Đã bỏ qua'
 export interface Violation {
   id: string
   type: ViolationType
+  types?: string[]
   cameraId: string
   cameraName: string
   location: string
@@ -15,12 +16,18 @@ export interface Violation {
   plate?: string
   vehicleType?: string
   confidence: number
+  trackId?: string  // Track ID từ backend (string format: 5 ký tự alphanumeric + hhmmss)
   images: {
     overview: string
     vehicle: string
     plate: string
   }
   status: ViolationStatus
+  violationHistory?: Array<{
+    type?: string
+    timestamp?: string
+    speed?: number
+  }>
 }
 
 export interface Settings {
@@ -29,9 +36,6 @@ export interface Settings {
   enableSpeedCheck: boolean
   enableRedLightCheck: boolean
   minConfidence: number
-  autoSendZaloOnConfirm: boolean
-  zaloToken: string
-  zaloTargetId: string
   cameras: Array<{ id: string; name: string; rtsp: string; location: string }>
   // Trạng thái UI cần lưu cho LiveMonitor
   monitorSelectedCamIds: string[]
@@ -47,7 +51,8 @@ export interface OperationLogEntry {
   timestamp: string
   user: string
   action: 'confirm' | 'skip'
-  violationType: ViolationType
+  violationTypes: ViolationType[]
+  trackId?: string
   plate?: string
   camera: string
   details?: string
@@ -56,6 +61,7 @@ export interface OperationLogEntry {
 interface State {
   violations: Violation[]
   addViolation: (v: Violation) => void
+  setViolations: (violations: Violation[]) => void
   updateViolation: (id: string, patch: Partial<Violation>) => void
   operationLogs: OperationLogEntry[]
   addOperationLog: (entry: OperationLogEntry) => void
@@ -64,7 +70,7 @@ interface State {
   /** Merge/update a camera's region config */
   setCameraRegion: (cameraId: string, patch: Partial<CameraRegion>) => void
   /** Clear a camera region (target part or all) */
-  clearCameraRegion: (cameraId: string, target?: 'stopLine' | 'lineB' | 'roi' | 'all') => void
+  clearCameraRegion: (cameraId: string, target?: 'stopLine' | 'all') => void
 }
 
 // Ghi chú: cấu hình mặc định cho ứng dụng (sẽ được merge với cấu hình đã lưu trong localStorage)
@@ -74,9 +80,6 @@ const initialSettings: Settings = {
   enableSpeedCheck: true,
   enableRedLightCheck: true,
   minConfidence: 0.6,
-  autoSendZaloOnConfirm: false,
-  zaloToken: '',
-  zaloTargetId: '',
   cameras: [],
   monitorSelectedCamIds: [],
   monitorShowAll: true,
@@ -108,8 +111,16 @@ export const useStore = create<State>((set) => ({
     }
     return { violations: [v, ...s.violations] }
   }),
+  setViolations: (violations) => set({ violations }),
   updateViolation: (id, patch) => set((s) => ({
-    violations: s.violations.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    violations: s.violations.map((x) => {
+      if (x.id !== id) return x
+      const next = { ...x, ...patch }
+      if (Array.isArray((patch as any)?.violationTags)) {
+        next.types = (patch as any).violationTags as string[]
+      }
+      return next
+    }),
   })),
   operationLogs: [],
   addOperationLog: (entry) => set((s) => ({
@@ -147,9 +158,10 @@ export const useStore = create<State>((set) => ({
       const prev = map[cameraId]
       if (prev) {
         const updated: CameraRegion = { ...prev }
-        if (target === 'stopLine') delete (updated as any).stopLine
-        if (target === 'lineB') delete (updated as any).lineB
-        if (target === 'roi') delete (updated as any).roi
+        if (target === 'stopLine') {
+          delete (updated as any).stopLine
+          delete (updated as any).lineB
+        }
         map[cameraId] = updated
       }
     }
@@ -160,4 +172,3 @@ export const useStore = create<State>((set) => ({
 }))
 
 export const VIOLATION_TYPES: ViolationType[] = ['Phát hiện', 'Vượt đèn đỏ', 'Không đội mũ', 'Quá tốc độ']
-

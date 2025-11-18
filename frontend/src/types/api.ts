@@ -6,8 +6,14 @@ export type Point = { x: number; y: number }
 
 export type CameraRegion = {
   stopLine?: [Point, Point] | null
-  lineB?: [Point, Point] | null
-  roi?: Point[] | null
+}
+
+export type CameraDetectionRules = {
+  speedLimit?: number
+  minConfidence?: number
+  enableRedLightCheck?: boolean
+  enableHelmetCheck?: boolean
+  enableSpeedCheck?: boolean
 }
 
 export type Camera = {
@@ -16,6 +22,7 @@ export type Camera = {
   rtsp: string
   location: string
   regions?: CameraRegion
+  detection_rules?: CameraDetectionRules
 }
 
 export type VehicleDensity = {

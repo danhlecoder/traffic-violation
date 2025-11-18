@@ -1,6 +1,7 @@
 import { Card, Typography, Tag, Space } from 'antd'
 import { ClockCircleOutlined, UserOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import { useStore } from '../store/useStore'
+import { violationTypeToTagColor } from '../constants/violations'
 
 const { Text } = Typography
 
@@ -10,20 +11,26 @@ export interface LogEntry {
   timestamp: Date
   user: string
   action: 'confirm' | 'skip'
-  violationType: string
+  violationTypes: string[]
+  trackId?: string
   plate: string
   camera: string
   details?: string
 }
 
-export default function OperationLog({ logs, onSelect }: { logs?: LogEntry[]; onSelect?: (payload: { plate?: string; violationType?: string; camera?: string }) => void }) {
+export default function OperationLog({ logs, onSelect }: { logs?: LogEntry[]; onSelect?: (payload: { trackId?: string; plate?: string; violationTypes?: string[]; camera?: string }) => void }) {
   const storeLogs = useStore((s) => s.operationLogs)
   const items = (logs ?? storeLogs.map(l => ({
     id: l.id,
     timestamp: new Date(l.timestamp),
     user: l.user,
     action: l.action,
-    violationType: l.violationType,
+    violationTypes: Array.isArray(l.violationTypes) && l.violationTypes.length
+      ? l.violationTypes
+      : (l as any).violationType
+        ? [(l as any).violationType]
+        : [],
+    trackId: l.trackId,
     plate: l.plate ?? '',
     camera: l.camera,
     details: l.details,
@@ -69,15 +76,26 @@ export default function OperationLog({ logs, onSelect }: { logs?: LogEntry[]; on
         {items.map(log => {
           const actionInfo = getActionInfo(log.action)
           return (
-            <div key={log.id} className="log-entry" style={{ cursor: onSelect ? 'pointer' : 'default' }} onClick={() => onSelect?.({ plate: log.plate, violationType: log.violationType, camera: log.camera })}>
+            <div
+              key={log.id}
+              className="log-entry"
+              style={{ cursor: onSelect ? 'pointer' : 'default' }}
+              onClick={() => onSelect?.({ trackId: log.trackId, plate: log.plate, violationTypes: log.violationTypes, camera: log.camera })}
+            >
               <div className="log-header">
                 <Space size="small">
                   <Tag color={actionInfo.color} icon={actionInfo.icon}>
                     {actionInfo.text}
                   </Tag>
-                  <Text strong style={{ fontSize: 12 }}>
-                    {log.violationType}
-                  </Text>
+                  <Space size={4} wrap>
+                    {log.violationTypes?.length
+                      ? log.violationTypes.map((label) => (
+                        <Tag key={label} color={violationTypeToTagColor(label)} style={{ margin: 0 }}>
+                          {label}
+                        </Tag>
+                      ))
+                      : <Text strong style={{ fontSize: 12 }}>—</Text>}
+                  </Space>
                 </Space>
                 <Text type="secondary" style={{ fontSize: 11 }}>
                   {formatTime(log.timestamp)}

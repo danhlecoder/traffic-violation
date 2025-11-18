@@ -9,9 +9,9 @@ Scripts để deploy hệ thống lên 4 server riêng biệt.
 | Script | Mô Tả | Chạy Trên |
 |--------|-------|-----------|
 | `deploy-server1-mongo.sh` | Deploy MongoDB + Mongo API | Server 1 |
-| `deploy-server2-yolo.sh` | Deploy YOLO Detection Service | Server 2 |
-| `deploy-server3-backend.sh` | Deploy Backend API | Server 3 |
-| `deploy-server4-frontend.sh` | Deploy Frontend Web | Server 4 |
+| `deploy-server2-backend.sh` | Deploy Backend API (YOLO tích hợp) | Server 2 |
+| `deploy-server3-frontend.sh` | Deploy Frontend Web | Server 3 |
+| `deploy-server4-n8n.sh` | Deploy N8N Automation (optional) | Server 4 |
 
 ---
 
@@ -21,7 +21,7 @@ Scripts để deploy hệ thống lên 4 server riêng biệt.
 
 **Không cần chạy script tự động**, bạn tự sửa file config:
 
-#### Backend (Server 3):
+#### Backend (Server 2):
 ```bash
 # Copy file mẫu
 cp backend/.env.multi-server backend/.env
@@ -30,13 +30,12 @@ cp backend/.env.multi-server backend/.env
 nano backend/.env
 ```
 
-Sửa 2 dòng:
+Sửa dòng:
 ```env
-YOLO_API_URL=http://[IP_SERVER_2]:8001
 MONGO_API_URL=http://[IP_SERVER_1]:8002
 ```
 
-#### Frontend (Server 4):
+#### Frontend (Server 3):
 ```bash
 # Copy file mẫu
 cp frontend/.env.example frontend/.env.production.local
@@ -47,7 +46,7 @@ nano frontend/.env.production.local
 
 Sửa dòng:
 ```env
-VITE_API_BASE_URL=http://[IP_SERVER_3]:8000
+VITE_API_BASE_URL=http://[IP_SERVER_2]:8000
 ```
 
 📖 **Chi tiết:** Xem file `HUONG_DAN_DOI_IP.md`
@@ -70,30 +69,30 @@ cd traffic-violation
 bash deploy-scripts/deploy-server1-mongo.sh
 ```
 
-**Server 2 (YOLO):**
+**Server 2 (Backend - YOLO tích hợp sẵn):**
 ```bash
 ssh user@192.168.1.20
 cd traffic-violation
-bash deploy-scripts/deploy-server2-yolo.sh
+bash deploy-scripts/deploy-server2-backend.sh
 ```
 
-**Server 3 (Backend):**
+**Server 3 (Frontend):**
 ```bash
 ssh user@192.168.1.30
 cd traffic-violation
-bash deploy-scripts/deploy-server3-backend.sh
+bash deploy-scripts/deploy-server3-frontend.sh
 ```
 
-**Server 4 (Frontend):**
+**Server 4 (N8N - Optional):**
 ```bash
 ssh user@192.168.1.40
 cd traffic-violation
-bash deploy-scripts/deploy-server4-frontend.sh
+docker compose -f docker-compose.n8n.yml up -d
 ```
 
 ### Bước 4: Truy Cập Hệ Thống
 
-Mở trình duyệt: `http://192.168.1.40:3000`
+Mở trình duyệt: `http://192.168.1.30:3000`
 
 ---
 
@@ -102,13 +101,13 @@ Mở trình duyệt: `http://192.168.1.40:3000`
 Nếu IP server thay đổi, chỉ cần:
 
 1. Chạy lại `setup-multi-server.sh` với IP mới
-2. Deploy lại Server 3 (Backend) và Server 4 (Frontend):
+2. Deploy lại Server 2 (Backend) và Server 3 (Frontend):
    ```bash
+   # Server 2
+   bash deploy-scripts/deploy-server2-backend.sh
+
    # Server 3
-   bash deploy-scripts/deploy-server3-backend.sh
-   
-   # Server 4
-   bash deploy-scripts/deploy-server4-frontend.sh
+   bash deploy-scripts/deploy-server3-frontend.sh
    ```
 
 ---
@@ -119,9 +118,9 @@ Nếu IP server thay đổi, chỉ cần:
 
 **PHẢI** deploy theo đúng thứ tự:
 1. Server 1 (MongoDB) - Chờ MongoDB khởi động
-2. Server 2 (YOLO) - Chờ YOLO load model
-3. Server 3 (Backend) - Backend phụ thuộc vào 2 service trên
-4. Server 4 (Frontend) - Frontend phụ thuộc vào Backend
+2. Server 2 (Backend) - Backend phụ thuộc MongoDB, YOLO tích hợp sẵn
+3. Server 3 (Frontend) - Frontend phụ thuộc vào Backend
+4. Server 4 (N8N - Optional) - Automation workflows
 
 ### 2. Firewall
 
@@ -133,22 +132,23 @@ sudo ufw allow 27017/tcp  # MongoDB
 sudo ufw allow 8002/tcp   # Mongo API
 
 # Server 2
-sudo ufw allow 8001/tcp   # YOLO API
+sudo ufw allow 8000/tcp   # Backend API (YOLO tích hợp)
 
 # Server 3
-sudo ufw allow 8000/tcp   # Backend API
-
-# Server 4
 sudo ufw allow 3000/tcp   # Frontend Web
+
+# Server 4 (Optional)
+sudo ufw allow 8001/tcp   # N8N Automation
 ```
 
 ### 3. Models YOLO
 
-Server 2 cần có 2 file model:
-- `backend/models/best1.pt` (phát hiện xe, biển số)
-- `backend/models/license_plate.pt` (OCR biển số)
+Server 2 (Backend) cần có 3 file model trong thư mục `backend/models/`:
+- `best1.pt` - Phát hiện xe, mũ bảo hiểm, đèn giao thông, biển số
+- `license_plate.pt` - Phát hiện biển số (backup)
+- `number_license_model.pt` - OCR ký tự biển số
 
-Upload 2 file này lên Server 2 trước khi deploy!
+Upload 3 file này lên Server 2 trước khi deploy!
 
 ---
 
@@ -160,14 +160,14 @@ Test từng service sau khi deploy:
 # MongoDB API
 curl http://192.168.1.10:8002/health
 
-# YOLO API
-curl http://192.168.1.20:8001/health
-
-# Backend API
-curl http://192.168.1.30:8000/api/cameras
+# Backend API (YOLO tích hợp sẵn)
+curl http://192.168.1.20:8000/api/cameras
 
 # Frontend (mở trình duyệt)
-http://192.168.1.40:3000
+http://192.168.1.30:3000
+
+# N8N (Optional)
+http://192.168.1.40:8001
 ```
 
 ---

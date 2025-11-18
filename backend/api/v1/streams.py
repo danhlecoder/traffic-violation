@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
 from ...core.streaming.mjpeg import generate_mjpeg
-from ...clients.mongodb_service import get_mongodb_service
+from ..clients.mongodb_service import get_mongodb_service
 from ...utils.logger import app_logger as logger
 from ...core.analysis.density import get_vehicle_density_info, get_vehicle_count
 
@@ -25,11 +25,11 @@ def stream(
 ):
     """
     Endpoint trả về MJPEG stream từ RTSP/HTTP source
-    
+
     Headers để tránh timeout:
     - Connection: keep-alive
     - Keep-Alive: timeout=300
-    
+
     MJPEG stream từ nguồn RTSP/HTTP với YOLO detection (via API)
     """
     if not rtsp:
@@ -42,8 +42,7 @@ def stream(
     try:
         logger.info(f"Bắt đầu stream từ: {rtsp} (FPS={fps}, Quality={quality}, Detection={detection})")
 
-        # Lấy camera info từ MongoDB API
-        roi = None
+        # Lấy camera info từ MongoDB API (only stopline)
         stopline = None
         camera_id = None
         camera_name = None
@@ -51,60 +50,28 @@ def stream(
         try:
             service = get_mongodb_service()
             cameras = service.get_cameras()
-            
+
             # Find camera by RTSP URL
-            camera_doc = None
-            for cam in cameras:
-                if cam.get('rtsp') == rtsp:
-                    camera_doc = cam
-                    break
-            
+            camera_doc = next((cam for cam in cameras if cam.get('rtsp') == rtsp), None)
+
             if camera_doc:
                 logger.info(f"✓ Tìm thấy camera trong DB cho rtsp: {rtsp}")
                 camera_id = camera_doc.get('id')
                 camera_name = camera_doc.get('name')
                 location = camera_doc.get('location')
 
-                if camera_doc.get('regions'):
-                    regions = camera_doc['regions']
-
-                    # Load ROI
-                    if regions.get('roi'):
-                        roi = regions['roi']
-                        logger.info(f"✓ Đã load ROI cho camera {camera_id}: {len(roi)} điểm")
-                    else:
-                        logger.warning(f"⚠️  Camera {camera_id} KHÔNG có ROI - sẽ track TOÀN BỘ khung hình")
-
-                    # Load stopline
-                    if regions.get('stopLine'):
-                        raw_stopline = regions['stopLine']
-
-                        if isinstance(raw_stopline, list) and len(raw_stopline) > 0:
-                            first_point = raw_stopline[0]
-                            if isinstance(first_point, dict) and "y" in first_point:
-                                y_value = float(first_point["y"])
-                                stopline = {
-                                    "y": y_value,
-                                    "is_normalized": (0 <= y_value <= 1)
-                                }
-                                logger.info(f"✓ Đã load stopline: y={y_value:.3f}, normalized={stopline['is_normalized']}")
-                            else:
-                                logger.error(f"Stopline point format sai: {first_point}")
-
-                        elif isinstance(raw_stopline, dict) and "y" in raw_stopline:
-                            y_value = float(raw_stopline["y"])
-                            stopline = {
-                                "y": y_value,
-                                "is_normalized": (0 <= y_value <= 1)
-                            }
-                            logger.info(f"✓ Đã load stopline (dict): y={y_value:.3f}")
-
-                        else:
-                            logger.error(f"Stopline format không đúng: {type(raw_stopline)}, value={raw_stopline}")
-                    else:
-                        logger.info(f"⚠️  Camera {camera_id} KHÔNG có stopLine - chỉ detect ROI entry violations")
+                regions = camera_doc.get('regions') or {}
+                raw_stopline = regions.get('stopLine')
+                if isinstance(raw_stopline, list) and len(raw_stopline) > 0 and isinstance(raw_stopline[0], dict) and 'y' in raw_stopline[0]:
+                    y_value = float(raw_stopline[0]['y'])
+                    stopline = {"y": y_value, "is_normalized": (0 <= y_value <= 1)}
+                    logger.info(f"✓ Đã load stopline: y={y_value:.3f}, normalized={stopline['is_normalized']}")
+                elif isinstance(raw_stopline, dict) and 'y' in raw_stopline:
+                    y_value = float(raw_stopline['y'])
+                    stopline = {"y": y_value, "is_normalized": (0 <= y_value <= 1)}
+                    logger.info(f"✓ Đã load stopline (dict): y={y_value:.3f}")
                 else:
-                    logger.warning(f"⚠️  Camera {camera_id} KHÔNG có regions config - sẽ track TOÀN BỘ và không detect stopline")
+                    logger.info(f"⚠️  Camera {camera_id} KHÔNG có stopLine")
             else:
                 logger.warning(f"✗ KHÔNG tìm thấy camera trong DB cho rtsp: {rtsp}")
         except Exception as e:
@@ -115,7 +82,6 @@ def stream(
             fps=fps,
             jpeg_quality=quality,
             enable_detection=detection,
-            roi=roi,
             stopline=stopline,
             camera_id=camera_id,
             camera_name=camera_name,
@@ -146,7 +112,7 @@ def stream(
 def get_stream_density(src: str = Query(..., description="URL nguồn RTSP/HTTP")):
     """
     Lấy mật độ phương tiện hiện tại của stream
-    
+
     Returns:
         {
             "count": 5,

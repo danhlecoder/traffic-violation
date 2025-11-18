@@ -64,3 +64,19 @@ export async function getCameraDensity(rtsp: string): Promise<VehicleDensity> {
     `/v1/stream/density?src=${encodeURIComponent(rtsp)}`
   )
 }
+
+/**
+ * Cập nhật detection rules cho camera
+ */
+export async function updateCameraDetectionRules(
+  id: string,
+  rules: {
+    speedLimit?: number
+    minConfidence?: number
+    enableRedLightCheck?: boolean
+    enableHelmetCheck?: boolean
+    enableSpeedCheck?: boolean
+  }
+): Promise<void> {
+  await apiClient.put(`/v1/cameras/${encodeURIComponent(id)}/detection-rules`, rules)
+}

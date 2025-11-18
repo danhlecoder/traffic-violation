@@ -1,17 +1,45 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
-import { streams } from '../services/api'
-import { Card, Form, InputNumber, Switch, Input, Button, Table, Space, Modal, Divider, Typography, Row, Col, Upload } from 'antd'
-import { UploadOutlined, DownloadOutlined } from '@ant-design/icons'
+import { upsertCamera, deleteCamera, updateCameraDetectionRules } from '../services/camera.service'
+import { Card, Form, Input, Button, Table, Space, Modal, Row, Col, Upload } from 'antd'
+import { UploadOutlined, DownloadOutlined, SettingOutlined } from '@ant-design/icons'
 import toast from 'react-hot-toast'
+import CameraDetectionRulesModal, { type CameraDetectionRules } from '../components/CameraDetectionRulesModal'
 
 export default function Settings() {
   const settings = useStore((s) => s.settings)
   const update = useStore((s) => s.updateSettings)
   const [local, setLocal] = useState(settings)
+  const [detectionRulesModal, setDetectionRulesModal] = useState<{
+    open: boolean
+    cameraId: string
+    cameraName: string
+    rules?: CameraDetectionRules
+  }>({ open: false, cameraId: '', cameraName: '' })
   const smallPad = 12
 
-  function save() {
+  // State để lưu detection rules tạm thời cho camera (kể cả camera chưa lưu vào DB)
+  const [cameraDetectionRules, setCameraDetectionRules] = useState<Record<string, CameraDetectionRules>>({})
+
+  // Lấy detection rules từ camera trong DB hoặc từ state tạm thời
+  const getCameraDetectionRules = async (cameraId: string): Promise<CameraDetectionRules | undefined> => {
+    // Nếu có trong state tạm thời, dùng luôn
+    if (cameraDetectionRules[cameraId]) {
+      return cameraDetectionRules[cameraId]
+    }
+
+    // Nếu không, thử lấy từ DB
+    try {
+      const { getCamera } = await import('../services/camera.service')
+      const camera = await getCamera(cameraId)
+      return camera.detection_rules
+    } catch (e) {
+      // Camera chưa có trong DB, trả về undefined để dùng giá trị mặc định
+      return undefined
+    }
+  }
+
+  async function save() {
     // Kiểm tra trùng ID trước khi lưu
     const ids = local.cameras.map((c) => c.id)
     const dup = ids.find((id, idx) => ids.indexOf(id) !== idx)
@@ -20,10 +48,31 @@ export default function Settings() {
       return
     }
     update(local)
-    // Đồng bộ danh sách camera lên backend để lưu cùng regions
-    Promise.all(local.cameras.map((c) => streams.upsertCamera({ id: c.id, name: c.name, rtsp: c.rtsp, location: c.location, regions: (useStore.getState().settings.cameraRegions as any)[c.id] }))).then(() => {
+
+    // Đồng bộ danh sách camera lên backend để lưu cùng regions và detection_rules
+    try {
+      await Promise.all(local.cameras.map(async (c) => {
+        const cameraData: any = {
+          id: c.id,
+          name: c.name,
+          rtsp: c.rtsp,
+          location: c.location,
+          regions: (useStore.getState().settings.cameraRegions as any)[c.id]
+        }
+
+        // Nếu có detection rules trong state tạm thời, thêm vào
+        if (cameraDetectionRules[c.id]) {
+          cameraData.detection_rules = cameraDetectionRules[c.id]
+        }
+
+        await upsertCamera(cameraData)
+      }))
+
       toast.success('Đã lưu cấu hình')
-    }).catch(() => toast.error('Lưu server thất bại (offline?)'))
+    } catch (e) {
+      console.error('Lỗi lưu camera:', e)
+      toast.error('Lưu server thất bại (offline?)')
+    }
   }
 
   function addCamera() {
@@ -53,7 +102,7 @@ export default function Settings() {
       onOk: async () => {
         try {
           // Xóa dưới DB ngay lập tức
-          await streams.deleteCamera(id)
+          await deleteCamera(id)
         } catch (e) {
           toast.error('Xóa trên server thất bại')
           return
@@ -63,11 +112,60 @@ export default function Settings() {
         const nextCams = local.cameras.filter((c) => c.id !== id)
         const nextRegions = { ...(useStore.getState().settings.cameraRegions || {}) } as any
         if (nextRegions[id]) delete nextRegions[id]
+
+        // Xóa detection rules tạm thời
+        const nextRules = { ...cameraDetectionRules }
+        if (nextRules[id]) delete nextRules[id]
+        setCameraDetectionRules(nextRules)
+
         update({ cameras: nextCams, cameraRegions: nextRegions })
         setLocal({ ...local, cameras: nextCams, cameraRegions: nextRegions })
         toast.success('Đã xóa camera')
       },
     })
+  }
+
+  // Mở modal thiết lập detection rules
+  async function openDetectionRulesModal(cameraId: string, cameraName: string) {
+    // Lấy rules từ state tạm thời hoặc từ DB
+    const rules = await getCameraDetectionRules(cameraId)
+    setDetectionRulesModal({
+      open: true,
+      cameraId,
+      cameraName,
+      rules,
+    })
+  }
+
+  // Lưu detection rules cho camera (có thể là camera chưa lưu vào DB)
+  async function saveDetectionRules(cameraId: string, rules: CameraDetectionRules) {
+    try {
+      // Lưu vào state tạm thời trước (để có thể lưu cùng camera sau này)
+      setCameraDetectionRules(prev => ({
+        ...prev,
+        [cameraId]: rules
+      }))
+
+      // Nếu camera đã có trong DB, lưu ngay
+      try {
+        // Kiểm tra camera có trong DB không
+        const { getCamera } = await import('../services/camera.service')
+        await getCamera(cameraId)
+
+        // Camera đã có trong DB, lưu detection rules ngay
+        await updateCameraDetectionRules(cameraId, rules)
+        toast.success('Đã lưu luật phát hiện cho camera')
+      } catch (e: any) {
+        // Camera chưa có trong DB (404), chỉ lưu vào state tạm thời
+        // Sẽ lưu cùng camera khi click "Lưu" trong Settings
+        toast.success('Đã lưu luật phát hiện (sẽ áp dụng khi lưu camera)')
+      }
+
+      setDetectionRulesModal({ open: false, cameraId: '', cameraName: '' })
+    } catch (e) {
+      console.error('Lỗi lưu detection rules:', e)
+      toast.error('Lưu luật phát hiện thất bại')
+    }
   }
 
   // Xuất cấu hình vùng vẽ camera (cameraRegions) ra JSON để backup/chia sẻ
@@ -103,90 +201,67 @@ export default function Settings() {
   }
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <Row gutter={12}>
-        <Col xs={24} md={12}>
-          <Card title="Luật phát hiện" size="small" bodyStyle={{ padding: smallPad }}>
-            <Form layout="vertical">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <Form.Item label="Ngưỡng tốc độ (km/h)" style={{ marginBottom: 10 }}>
-                  <InputNumber min={0} value={local.speedLimit} onChange={(v) => setLocal({ ...local, speedLimit: Number(v || 0) })} style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item label="Độ tin cậy tối thiểu" style={{ marginBottom: 10 }}>
-                  <InputNumber step={0.01} min={0} max={1} value={local.minConfidence} onChange={(v) => setLocal({ ...local, minConfidence: Number(v || 0) })} style={{ width: '100%' }} />
-                </Form.Item>
-              </div>
-              <Divider style={{ margin: '8px 0' }} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Typography.Text>Phát hiện vượt đèn đỏ</Typography.Text>
-                  <Switch checked={local.enableRedLightCheck} onChange={(v) => setLocal({ ...local, enableRedLightCheck: v })} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Typography.Text>Không đội mũ BH</Typography.Text>
-                  <Switch checked={local.enableHelmetCheck} onChange={(v) => setLocal({ ...local, enableHelmetCheck: v })} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Typography.Text>Quá tốc độ</Typography.Text>
-                  <Switch checked={local.enableSpeedCheck} onChange={(v) => setLocal({ ...local, enableSpeedCheck: v })} />
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', marginTop: 8 }}>
-                <Button type="primary" size="small" onClick={save}>Lưu</Button>
-              </div>
-            </Form>
-          </Card>
-        </Col>
-        <Col xs={24} md={12}>
-          <Card title="Tích hợp Zalo" size="small" bodyStyle={{ padding: smallPad }}>
-            <Form layout="vertical">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <Form.Item label="ZALO Access Token" style={{ marginBottom: 10 }}>
-                  <Input value={local.zaloToken} onChange={(e) => setLocal({ ...local, zaloToken: e.target.value })} placeholder="Token..." />
-                </Form.Item>
-                <Form.Item label="Đích gửi (User/Group ID)" style={{ marginBottom: 10 }}>
-                  <Input value={local.zaloTargetId} onChange={(e) => setLocal({ ...local, zaloTargetId: e.target.value })} placeholder="ID..." />
-                </Form.Item>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <Button type="primary" size="small" onClick={save}>Lưu</Button>
-              </div>
-            </Form>
-          </Card>
-        </Col>
-      </Row>
-
-      <Card
-        title="Quản lý Camera"
-        size="small"
-        bodyStyle={{ padding: smallPad }}
-        extra={
-          <Space>
-            <Button size="small" icon={<DownloadOutlined />} onClick={exportRegions}>Xuất vùng</Button>
-            <Upload showUploadList={false} accept="application/json" beforeUpload={() => false} onChange={(e) => { const f = e.file as any; if (f?.originFileObj) importRegions(f.originFileObj) }}>
-              <Button size="small" icon={<UploadOutlined />}>Nhập vùng</Button>
-            </Upload>
-            <Button size="small" onClick={addCamera}>Thêm</Button>
-            <Button size="small" type="primary" onClick={save}>Lưu</Button>
-          </Space>
-        }
-      >
-        <Table
+    <>
+      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Card
+          title="Quản lý Camera"
           size="small"
-          bordered
-          rowKey="id"
-          pagination={false}
-          dataSource={local.cameras}
-          locale={{ emptyText: 'Trống' }}
-          columns={[
-            { title: 'ID', dataIndex: 'id', width: 120 },
-            { title: 'Tên', dataIndex: 'name', render: (_: string, r, i) => <Input size="small" value={r.name} onChange={(e) => { const arr = [...local.cameras]; arr[i] = { ...arr[i], name: e.target.value }; setLocal({ ...local, cameras: arr }) }} /> },
-            { title: 'RTSP', dataIndex: 'rtsp', render: (_: string, r, i) => <Input size="small" value={r.rtsp} onChange={(e) => { const arr = [...local.cameras]; arr[i] = { ...arr[i], rtsp: e.target.value }; setLocal({ ...local, cameras: arr }) }} /> },
-            { title: 'Vị trí', dataIndex: 'location', render: (_: string, r, i) => <Input size="small" value={r.location} onChange={(e) => { const arr = [...local.cameras]; arr[i] = { ...arr[i], location: e.target.value }; setLocal({ ...local, cameras: arr }) }} /> },
-            { title: 'Hành động', dataIndex: 'id', width: 120, render: (id: string) => <Button size="small" danger onClick={() => removeCamera(id)}>Xóa</Button> },
-          ]}
-        />
-      </Card>
-    </Space>
+          bodyStyle={{ padding: smallPad }}
+          extra={
+            <Space>
+              <Button size="small" icon={<DownloadOutlined />} onClick={exportRegions}>Xuất vùng</Button>
+              <Upload showUploadList={false} accept="application/json" beforeUpload={() => false} onChange={(e) => { const f = e.file as any; if (f?.originFileObj) importRegions(f.originFileObj) }}>
+                <Button size="small" icon={<UploadOutlined />}>Nhập vùng</Button>
+              </Upload>
+              <Button size="small" onClick={addCamera}>Thêm</Button>
+              <Button size="small" type="primary" onClick={save}>Lưu</Button>
+            </Space>
+          }
+        >
+          <Table
+            size="small"
+            bordered
+            rowKey="id"
+            pagination={false}
+            dataSource={local.cameras}
+            locale={{ emptyText: 'Trống' }}
+            columns={[
+              { title: 'ID', dataIndex: 'id', width: 120 },
+              { title: 'Tên', dataIndex: 'name', render: (_: string, r, i) => <Input size="small" value={r.name} onChange={(e) => { const arr = [...local.cameras]; arr[i] = { ...arr[i], name: e.target.value }; setLocal({ ...local, cameras: arr }) }} /> },
+              { title: 'RTSP', dataIndex: 'rtsp', render: (_: string, r, i) => <Input size="small" value={r.rtsp} onChange={(e) => { const arr = [...local.cameras]; arr[i] = { ...arr[i], rtsp: e.target.value }; setLocal({ ...local, cameras: arr }) }} /> },
+              { title: 'Vị trí', dataIndex: 'location', render: (_: string, r, i) => <Input size="small" value={r.location} onChange={(e) => { const arr = [...local.cameras]; arr[i] = { ...arr[i], location: e.target.value }; setLocal({ ...local, cameras: arr }) }} /> },
+              {
+                title: 'Hành động',
+                dataIndex: 'id',
+                width: 180,
+                render: (id: string, record: any) => (
+                  <Space>
+                    <Button
+                      size="small"
+                      icon={<SettingOutlined />}
+                      onClick={() => openDetectionRulesModal(id, record.name)}
+                    >
+                      Thiết lập
+                    </Button>
+                    <Button size="small" danger onClick={() => removeCamera(id)}>
+                      Xóa
+                    </Button>
+                  </Space>
+                ),
+              },
+            ]}
+          />
+        </Card>
+      </Space>
+
+      <CameraDetectionRulesModal
+        open={detectionRulesModal.open}
+        cameraId={detectionRulesModal.cameraId}
+        cameraName={detectionRulesModal.cameraName}
+        rules={detectionRulesModal.rules}
+        onSave={saveDetectionRules}
+        onCancel={() => setDetectionRulesModal({ open: false, cameraId: '', cameraName: '' })}
+      />
+    </>
   )
 }

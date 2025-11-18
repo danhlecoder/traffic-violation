@@ -1,16 +1,16 @@
 import { Modal, Button, Space, Tooltip, Typography, message } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LineOutlined, HighlightOutlined, ClearOutlined, CheckOutlined, CloseOutlined, InfoCircleOutlined } from '@ant-design/icons'
+import { LineOutlined, ClearOutlined, CheckOutlined, CloseOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useStore } from '../store/useStore'
 import RegionOverlay from './RegionOverlay'
 import { useElementScaler } from '../hooks/useElementScaler'
 import { useRegionDrawing } from '../hooks/useRegionDrawing'
-import { streams } from '../services/api'
-import * as streamSvc from '../services/streams'
+import { getCamera, updateCameraRegions } from '../services/camera.service'
+import { config } from '../config'
 
 const { Text } = Typography
 
-type Mode = 'idle' | 'draw-line' | 'draw-roi'
+type Mode = 'idle' | 'draw-line'
 
 export default function RegionEditorModal({
   open,
@@ -31,51 +31,16 @@ export default function RegionEditorModal({
   const cameraRegion = regions[cameraId] || {}
 
   const { ref: containerRef, toRelative, toPixel } = useElementScaler<HTMLDivElement>()
-  const { mode, setMode, tempLine, tempRoi, clickAddPoint, commitLine, commitRoi, cancel } = useRegionDrawing(
+  const { mode, setMode, tempLine, clickAddPoint, commitLine, cancel } = useRegionDrawing(
     async (p1, p2) => {
-      // Lưu vào store và gọi API backend (merge không xóa roi)
       const payload = { stopLine: [p1, p2] as any }
       setCameraRegion(cameraId, payload)
-      await streams.updateCameraRegions(cameraId, payload)
-    },
-    async (pts) => {
-      // Lưu ROI nhưng giữ nguyên stopLine hiện có (backend merge từng phần)
-      const payload = { roi: pts as any }
-      setCameraRegion(cameraId, payload)
-      await streams.updateCameraRegions(cameraId, payload)
+      await updateCameraRegions(cameraId, payload)
     }
   )
 
   const [loadingDetect, setLoadingDetect] = useState(false)
   const [loadingRegions, setLoadingRegions] = useState(false)
-
-  // Tạo ROI tự động từ lineB hiện tại
-  const createAutoROI = useCallback(async () => {
-    const lineB = cameraRegion.lineB
-    if (!lineB || lineB.length !== 2) {
-      message.error('Cần có lineB trước. Click "Line tự động" để tạo.')
-      return
-    }
-
-    try {
-      // Tính y trung bình của lineB làm cạnh trên
-      const y_top = (lineB[0].y + lineB[1].y) / 2
-
-      // Tạo 4 điểm ROI: từ lineB xuống đáy, kéo dài hết chiều ngang
-      const roi = [
-        { x: 0, y: y_top },   // Top-left
-        { x: 1, y: y_top },   // Top-right
-        { x: 1, y: 1 },       // Bottom-right
-        { x: 0, y: 1 },       // Bottom-left
-      ]
-
-      setCameraRegion(cameraId, { roi })
-      await streams.updateCameraRegions(cameraId, { roi })
-      message.success('Đã tạo ROI tự động từ lineB')
-    } catch (e: any) {
-      message.error(`Lỗi tạo ROI: ${e?.message || e}`)
-    }
-  }, [cameraRegion.lineB, cameraId, setCameraRegion])
 
   // Khi modal mở, nạp ngay regions từ backend để tránh lệ thuộc store cũ
   useEffect(() => {
@@ -84,7 +49,7 @@ export default function RegionEditorModal({
     ;(async () => {
       setLoadingRegions(true)
       try {
-        const cam = await streamSvc.getCamera(cameraId)
+        const cam = await getCamera(cameraId)
         if (!aborted && cam?.regions) {
           setCameraRegion(cameraId, cam.regions as any)
         }
@@ -146,7 +111,7 @@ export default function RegionEditorModal({
 
       if (!dataUrlLocal) throw new Error('Không có ảnh để detect')
 
-      resp = await fetch(`${streamSvc.getApiBase()}/v1/detection/stopline`, {
+      resp = await fetch(`${config.apiBase}/v1/detection/stopline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUrlLocal }),
@@ -154,26 +119,12 @@ export default function RegionEditorModal({
       if (!resp) throw new Error('no response')
       if (!resp.ok) throw new Error(`detect failed: ${resp.status}`)
       const data = await resp.json()
-      console.log('🎯 Response data:', data)
       const line = data?.stopLine
-      const lineB = data?.lineB
-      const roi = data?.roi
-      console.log('📍 lineB:', lineB, 'roi:', roi)
       if (line && line.length === 2) {
         const payload: any = { stopLine: line }
-        if (lineB && lineB.length === 2) {
-          payload.lineB = lineB
-        }
-        if (roi && roi.length >= 3) {
-          payload.roi = roi
-        }
-        console.log('📦 Payload sẽ gửi:', payload)
         setCameraRegion(cameraId, payload)
-        await streams.updateCameraRegions(cameraId, payload)
-        const parts = ['stopLine']
-        if (lineB) parts.push('lineB')
-        if (roi) parts.push('ROI')
-        message.success(`Đã phát hiện và lưu: ${parts.join(' + ')}`)
+        await updateCameraRegions(cameraId, payload)
+        message.success('Đã phát hiện và lưu: stopLine')
         if (data?.image) {
           // Cập nhật luôn ảnh nếu server trả về
           try { setTimeout(() => setLoadingDetect(false), 0) } catch {}
@@ -225,7 +176,7 @@ export default function RegionEditorModal({
             )}
 
             <div onClick={onOverlayClick} className="region-overlay" style={{ cursor: mode === 'idle' ? 'default' : 'crosshair' }} />
-            <RegionOverlay region={cameraRegion} toPixel={toPixel} tempLine={tempLine} tempRoi={tempRoi} readOnly />
+            <RegionOverlay region={cameraRegion} toPixel={toPixel} tempLine={tempLine} readOnly />
 
             {/* Toolbar */}
             <div className="region-toolbar">
@@ -234,54 +185,27 @@ export default function RegionEditorModal({
                   <Tooltip title="Vẽ vạch dừng (2 điểm)">
                     <Button size="small" icon={<LineOutlined />} onClick={() => setMode('draw-line')}>Line</Button>
                   </Tooltip>
-                  <Tooltip title="Vẽ vùng đèn giao thông (đa giác)">
-                    <Button size="small" icon={<HighlightOutlined />} onClick={() => setMode('draw-roi')}>ROI</Button>
-                  </Tooltip>
-                  <Tooltip title="Phát hiện vạch dừng tự động (stopLine + lineB + ROI)">
+                  <Tooltip title="Phát hiện vạch dừng tự động">
                     <Button size="small" loading={loadingDetect} disabled={!imageSrc} onClick={runAutoDetect}>Line tự động</Button>
                   </Tooltip>
-                  {cameraRegion.lineB && (
-                    <Tooltip title="Tạo ROI từ lineB hiện tại">
-                      <Button size="small" onClick={createAutoROI}>ROI tự động</Button>
-                    </Tooltip>
-                  )}
                   {cameraRegion.stopLine && (
-                    <Tooltip title="Xóa vạch dừng (và lineB, ROI)">
+                    <Tooltip title="Xóa vạch dừng">
                       <Button
                         size="small"
                         danger
                         icon={<ClearOutlined />}
                         onClick={async () => {
                           clearCameraRegion(cameraId, 'stopLine')
-                          clearCameraRegion(cameraId, 'lineB')
-                          clearCameraRegion(cameraId, 'roi')
-                          try { await streams.updateCameraRegions(cameraId, { stopLine: null, lineB: null, roi: null }) } catch {}
+                          try { await updateCameraRegions(cameraId, { stopLine: null }) } catch {}
                         }}
                       >Xóa line</Button>
-                    </Tooltip>
-                  )}
-                  {cameraRegion.roi && (
-                    <Tooltip title="Xóa ROI">
-                      <Button
-                        size="small"
-                        danger
-                        icon={<ClearOutlined />}
-                        onClick={async () => {
-                          clearCameraRegion(cameraId, 'roi')
-                          try { await streams.updateCameraRegions(cameraId, { roi: null }) } catch {}
-                        }}
-                      >Xóa ROI</Button>
                     </Tooltip>
                   )}
                 </Space>
               ) : (
                 <Space size={6}>
                   <Button size="small" icon={<CloseOutlined />} onClick={cancel}>Hủy</Button>
-                  {mode === 'draw-line' ? (
-                    <Button type="primary" size="small" icon={<CheckOutlined />} disabled={!tempLine.p1 || !tempLine.p2} onClick={commitLine}>Lưu line</Button>
-                  ) : (
-                    <Button type="primary" size="small" icon={<CheckOutlined />} disabled={tempRoi.length < 3} onClick={commitRoi}>Lưu ROI</Button>
-                  )}
+                  <Button type="primary" size="small" icon={<CheckOutlined />} disabled={!tempLine.p1 || !tempLine.p2} onClick={commitLine}>Lưu line</Button>
                 </Space>
               )}
             </div>

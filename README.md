@@ -21,6 +21,7 @@ Hệ thống phát hiện vi phạm giao thông sử dụng YOLO và Computer Vi
 - **🗄️ MongoDB Integration**: Lưu trữ cấu hình và dữ liệu
 - **🌐 RESTful API**: FastAPI với OpenAPI docs
 - **🎨 Modern UI**: React + TypeScript frontend
+- **🤖 N8N Automation**: Workflow automation và tích hợp
 
 ### 🔜 Sắp có
 
@@ -78,8 +79,8 @@ bash run.sh up
 
 # 4. Truy cập ứng dụng
 # Frontend: http://localhost:3000
-# Backend: http://localhost:8000
-# YOLO API: http://localhost:8001
+# Backend: http://localhost:8000 (YOLO tích hợp sẵn)
+# N8N Automation: http://localhost:8001 (user: admin, pass: admin123)
 # Mongo API: http://localhost:8002
 ```
 
@@ -89,9 +90,9 @@ Deploy từng service lên server riêng biệt với IP khác nhau.
 
 **Kiến trúc:**
 - Server 1 (192.168.1.10): MongoDB + Mongo API
-- Server 2 (192.168.1.20): YOLO Detection Service
-- Server 3 (192.168.1.30): Backend API
-- Server 4 (192.168.1.40): Frontend Web
+- Server 2 (192.168.1.30): Backend API (YOLO tích hợp sẵn)
+- Server 3 (192.168.1.40): Frontend Web
+- Server 4 (192.168.1.50): N8N Automation (optional)
 
 **Bước 1: Chuẩn bị config (chạy 1 lần)**
 
@@ -127,13 +128,13 @@ bash deploy-scripts/deploy-server4-frontend.sh
 sudo ufw allow 27017/tcp 8002/tcp
 
 # Server 2
-sudo ufw allow 8001/tcp
-
-# Server 3
 sudo ufw allow 8000/tcp
 
-# Server 4
+# Server 3
 sudo ufw allow 3000/tcp
+
+# Server 4 (optional - N8N)
+sudo ufw allow 8001/tcp
 ```
 
 **Hướng dẫn chi tiết:**

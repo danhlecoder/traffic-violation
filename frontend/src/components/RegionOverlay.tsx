@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import type { CameraRegion, Point } from '../types/regions'
 
 export default function RegionOverlay({
@@ -14,8 +13,8 @@ export default function RegionOverlay({
   tempLine?: { p1?: Point; p2?: Point }
   tempRoi?: Point[]
 }) {
-  const hasRegion = Boolean(region?.stopLine || region?.lineB || (region?.roi && region.roi.length >= 3))
-  const hasTemp = Boolean(tempLine?.p1 || (tempRoi && tempRoi.length > 0))
+  const hasRegion = Boolean(region?.stopLine)
+  const hasTemp = Boolean(tempLine?.p1)
   if (!hasRegion && !hasTemp) return null
 
   return (
@@ -45,7 +44,7 @@ export default function RegionOverlay({
             const B = toPixel(b)
             return (
               <g>
-                <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} className="region-line" style={{ strokeWidth: 2 }} />
+                <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} className="region-line" style={{ strokeWidth: 2, stroke: '#ffeb3b' }} />
                 <circle cx={A.x} cy={A.y} r={4} className="region-point" />
                 <circle cx={B.x} cy={B.y} r={4} className="region-point" />
               </g>
@@ -64,40 +63,6 @@ export default function RegionOverlay({
                 {B ? <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} className="region-line temp" /> : null}
                 <circle cx={A.x} cy={A.y} r={5} className="region-point temp" />
                 {B ? <circle cx={B.x} cy={B.y} r={5} className="region-point temp" /> : null}
-              </g>
-            )
-          })()}
-        </svg>
-      )}
-
-      {region?.roi && region.roi.length >= 3 && (
-        <svg className="region-svg">
-          {(() => {
-            const pts = region.roi!.map(toPixel)
-            const d = pts.map((p) => `${p.x},${p.y}`).join(' ')
-            return (
-              <g>
-                <polygon points={d} className="region-poly" />
-                {pts.map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r={4} className="region-point" />
-                ))}
-              </g>
-            )
-          })()}
-        </svg>
-      )}
-
-      {tempRoi && tempRoi.length > 0 && (
-        <svg className="region-svg">
-          {(() => {
-            const pts = tempRoi.map(toPixel)
-            const d = pts.map((p) => `${p.x},${p.y}`).join(' ')
-            return (
-              <g>
-                {pts.length >= 2 ? <polyline points={d} className="region-poly temp" /> : null}
-                {pts.map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r={4} className="region-point temp" />
-                ))}
               </g>
             )
           })()}

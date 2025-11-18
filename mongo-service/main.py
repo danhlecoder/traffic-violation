@@ -4,15 +4,15 @@ API v1 với connection pooling và indexes
 
 API Endpoints:
   GET  /health                       - Kiểm tra trạng thái service
-  
+
   CAMERAS:
   GET    /v1/cameras                 - Danh sách cameras
   POST   /v1/cameras                 - Tạo camera mới
   GET    /v1/cameras/{id}            - Chi tiết camera
   PUT    /v1/cameras/{id}            - Cập nhật camera
   DELETE /v1/cameras/{id}            - Xóa camera
-  PUT    /v1/cameras/{id}/regions    - Cập nhật ROI/stopline
-  
+  PUT    /v1/cameras/{id}/regions    - Cập nhật stopline
+
   VIOLATIONS:
   GET  /v1/violations                - Danh sách vi phạm
   POST /v1/violations                - Tạo vi phạm mới
@@ -69,9 +69,9 @@ def get_db():
         mongo_db = os.getenv("MONGO_DATABASE", "traffic")
         mongo_user = os.getenv("MONGO_USER", "admin")
         mongo_pass = os.getenv("MONGO_PASSWORD", "admin123")
-        
+
         connection_string = f"mongodb://{mongo_user}:{mongo_pass}@{mongo_host}:{mongo_port}/"
-        
+
         # Connection pooling configuration
         _client = MongoClient(
             connection_string,
@@ -86,7 +86,7 @@ def get_db():
         _db = _client[mongo_db]
         logger.info(f"✓ Connected to MongoDB: {mongo_user}@{mongo_host}:{mongo_port}/{mongo_db}")
         logger.info(f"✓ Connection pool: maxPoolSize=50, minPoolSize=10")
-    
+
     return _db
 
 
@@ -94,21 +94,21 @@ async def create_indexes():
     """Create database indexes for performance"""
     try:
         db = get_db()
-        
+
         # Cameras collection indexes
         cameras = db["cameras"]
         cameras.create_index([("id", ASCENDING)], unique=True)
         cameras.create_index([("active", ASCENDING)])
         logger.info("✓ Created cameras indexes")
-        
-        # Violations collection indexes  
+
+        # Violations collection indexes
         violations = db["violations"]
         violations.create_index([("timestamp", DESCENDING)])
         violations.create_index([("camera_id", ASCENDING), ("timestamp", DESCENDING)])
         violations.create_index([("status", ASCENDING), ("timestamp", DESCENDING)])
         violations.create_index([("license_plate", ASCENDING)])
         logger.info("✓ Created violations indexes")
-        
+
     except Exception as e:
         logger.error(f"Failed to create indexes: {e}")
 
@@ -140,7 +140,7 @@ class Camera(BaseModel):
     rtsp: str  # Bắt buộc - URL RTSP stream
     location: Optional[str] = None
     active: Optional[bool] = True
-    regions: Optional[Dict] = None  # {roi: [...], stopLine: [...], lineB: [...]}
+    regions: Optional[Dict] = None  # {stopLine: [...]}
 
 
 @router_v1.get("/cameras")
@@ -175,7 +175,7 @@ async def create_camera(camera: Dict[str, Any]):
     try:
         db = get_db()
         camera["created_at"] = datetime.utcnow()
-        
+
         # Upsert based on id
         camera_id = camera.get("id")
         if camera_id:
@@ -197,23 +197,23 @@ async def update_camera(camera_id: str, camera_data: Dict[str, Any]):
     """Update camera by ID (replace entire document)"""
     try:
         db = get_db()
-        
+
         # Ensure id matches
         camera_data["id"] = camera_id
-        
+
         # Remove fields we don't want to update
         camera_data.pop("_id", None)
         camera_data.pop("created_at", None)  # Keep original created_at
-        
+
         result = db.cameras.replace_one(
             {"id": camera_id},
             camera_data,
             upsert=False
         )
-        
+
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Camera not found")
-        
+
         return {"success": True, "updated": camera_id}
     except HTTPException:
         raise
@@ -227,10 +227,10 @@ async def delete_camera(camera_id: str):
     try:
         db = get_db()
         result = db.cameras.delete_one({"id": camera_id})
-        
+
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Camera not found")
-        
+
         return {"success": True, "deleted": camera_id}
     except HTTPException:
         raise
@@ -243,16 +243,38 @@ async def update_camera_regions(camera_id: str, regions: Dict[str, Any]):
     """Update camera regions (ROI, stopLine)"""
     try:
         db = get_db()
-        
+
         # Update regions field
         result = db.cameras.update_one(
             {"id": camera_id},
             {"$set": {"regions": regions}}
         )
-        
+
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Camera not found")
-        
+
+        return {"success": True, "updated": camera_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router_v1.put("/cameras/{camera_id}/detection-rules")
+async def update_camera_detection_rules(camera_id: str, rules: Dict[str, Any]):
+    """Update camera detection rules"""
+    try:
+        db = get_db()
+
+        # Update detection_rules field
+        result = db.cameras.update_one(
+            {"id": camera_id},
+            {"$set": {"detection_rules": rules}}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Camera not found")
+
         return {"success": True, "updated": camera_id}
     except HTTPException:
         raise
@@ -269,31 +291,33 @@ class Violation(BaseModel):
     location: str
     vehicle_type: str
     license_plate: Optional[str] = None
-    violation_type: str
+    violation_tags: List[str]  # List các loại vi phạm thay vì violation_type
+    violation_history: Optional[List[Dict]] = None  # Lịch sử vi phạm
     status: str = "detected"
     images: Dict
     confidence: float
-    track_id: Optional[int] = None
+    track_id: Optional[str] = None  # Track ID string (format: 5 ký tự alphanumeric + hhmmss)
+    speed: Optional[float] = None  # Tốc độ tính bằng km/h
 
 
 @router_v1.get("/violations")
 async def get_violations(
     status: Optional[str] = None,
     camera_id: Optional[str] = None,
-    limit: int = 100,
+    limit: int = 10000,  # Tăng limit mặc định để lấy toàn bộ violations
     offset: int = 0
 ):
     """Get violations with filters"""
     try:
         db = get_db()
-        
+
         # Build query
         query = {}
         if status:
             query["status"] = status
         if camera_id:
             query["camera_id"] = camera_id
-        
+
         # Query with pagination
         violations = list(
             db.violations.find(query)
@@ -301,15 +325,15 @@ async def get_violations(
             .skip(offset)
             .limit(limit)
         )
-        
+
         # Convert _id to id for frontend
         for v in violations:
             if "_id" in v:
                 v["id"] = str(v["_id"])
                 del v["_id"]
-        
+
         total = db.violations.count_documents(query)
-        
+
         return {
             "success": True,
             "data": violations,
@@ -327,12 +351,64 @@ async def create_violation(violation: Violation):
     try:
         db = get_db()
         violation_dict = violation.dict()
-        
+
         result = db.violations.insert_one(violation_dict)
         return {"success": True, "id": str(result.inserted_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router_v1.get("/violations/{track_id}")
+async def get_violation_by_track_id(track_id: str):
+    """Lấy violation theo track_id"""
+    try:
+        db = get_db()
+        violation = db.violations.find_one({"track_id": track_id}, {"_id": 0})
+        if not violation:
+            raise HTTPException(status_code=404, detail=f"Violation not found with track_id: {track_id}")
+        return {"success": True, "violation": violation}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router_v1.put("/violations/{track_id}")
+async def update_violation_by_track_id(track_id: str, update_data: Dict[str, Any]):
+    """Update violation by track_id"""
+    try:
+        db = get_db()
+
+        # Chỉ cho phép update các field được chỉnh sửa
+        allowed_fields = [
+            "violation_tags",  # Chỉ dùng violation_tags
+            "violation_history",  # Lịch sử vi phạm
+            "vehicle_type",
+            "license_plate",
+            "status",
+            "timestamp",
+            "speed",
+            "images",
+        ]
+        update_dict = {k: v for k, v in update_data.items() if k in allowed_fields}
+
+        if not update_dict:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+
+        # Tìm violation theo track_id (không cần filter status để có thể update cả confirmed/skipped)
+        result = db.violations.update_one(
+            {"track_id": track_id},  # Tìm theo track_id, không filter status
+            {"$set": update_dict}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail=f"Violation not found with track_id: {track_id}")
+
+        return {"success": True, "updated": track_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Đăng ký router v1
 app.include_router(router_v1, tags=["Database v1"])

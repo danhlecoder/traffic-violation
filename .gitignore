@@ -215,5 +215,8 @@ csv
 test-cam.py
 face_recognition.log
 .windsurf/
-.cursor/
+
 model/
+
+.cursor/
+.ipynb_checkpoints/

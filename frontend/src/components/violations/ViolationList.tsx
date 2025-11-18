@@ -15,6 +15,14 @@ export default function ViolationList({ items, onClick, height }: { items: Viola
             const types = getViolationTypes(v)
             const thumbSrc = isPlaceholder(v.images?.overview) ? undefined : v.images.overview
             const hasImg = Boolean(thumbSrc)
+            const rawCameraName = (v.cameraName || '').trim()
+            const normalizedCamera = rawCameraName.toLowerCase()
+            const tagMatchesCamera = rawCameraName
+              ? types.some((label) => label.toLowerCase() === normalizedCamera)
+              : false
+            const cameraLabel = tagMatchesCamera
+              ? (v.cameraId ? `Camera ${v.cameraId}` : '')
+              : (rawCameraName || (v.cameraId ? `Camera ${v.cameraId}` : ''))
             return (
               <div onClick={() => onClick(v)} className="vl-item-new" style={{ cursor: 'pointer' }}>
                 {/* Thumbnail nhỏ gọn hơn */}
@@ -23,9 +31,22 @@ export default function ViolationList({ items, onClick, height }: { items: Viola
                 {/* Nội dung chính - compact layout */}
                 <div className="vl-main">
                   <div className="vl-header">
-                    <Tag color={violationTypeToTagColor(types[0] || v.type)}>{types[0] || v.type}</Tag>
-                    <Text strong style={{ fontSize: 13 }}>{v.cameraName}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>• {v.location}</Text>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {types.length ? (
+                        types.map((label) => (
+                          <Tag key={label} color={violationTypeToTagColor(label)}>{label}</Tag>
+                        ))
+                      ) : (
+                        <Tag color={violationTypeToTagColor(v.type)}>{v.type}</Tag>
+                      )}
+                    </div>
+                    {cameraLabel && (
+                      <Text strong style={{ fontSize: 13 }}>{cameraLabel}</Text>
+                    )}
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {cameraLabel ? '• ' : ''}
+                      {v.location || '—'}
+                    </Text>
                   </div>
 
                   <div className="vl-details">
@@ -37,7 +58,7 @@ export default function ViolationList({ items, onClick, height }: { items: Viola
                     })}</div>
                     <div className="vl-plate">{v.plate ?? 'Chưa nhận diện'}</div>
                     {v.vehicleType && <div className="vl-vehicle">{v.vehicleType}</div>}
-                    {typeof v.speed === 'number' && <div className="vl-speed">{v.speed} km/h</div>}
+                    {typeof v.speed === 'number' && <div className="vl-speed">{v.speed.toFixed(1)} km/h</div>}
                   </div>
                 </div>
 

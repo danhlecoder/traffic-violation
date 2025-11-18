@@ -1,30 +1,118 @@
 """
-YOLO Detector - API Client Wrapper Cho Xử Lý Stream
+YOLO Detector - Local Model Loading (5-10x faster than API)
 """
 
 from typing import List, Dict, Any
 import numpy as np
 import cv2
-from ...clients.yolo_service import get_yolo_service
+from ...config.config import settings
 from ...utils.logger import app_logger as logger
 
 
 class YOLODetector:
-    """YOLO Detector - Gọi YOLO API Service (chậm hơn nhưng phân tán)"""
-    
+    """YOLO Detector - Load model cục bộ (nhanh hơn 5-10x so với API)"""
+
     def __init__(self):
-        self.service = get_yolo_service()
-        logger.info("✓ YOLO Detector initialized (API mode)")
-    
-    def detect(self, frame: np.ndarray, conf: float = 0.5, iou: float = 0.4) -> List[Dict[str, Any]]:
+        try:
+            from ultralytics import YOLO
+            import torch
+
+            # Load model từ file
+            model_path = settings.YOLO_MODEL_PATH
+            logger.info(f"Loading YOLO model from: {model_path}")
+
+            self.model = YOLO(model_path)
+
+            # Chọn device tự động: CUDA nếu khả dụng, ngược lại CPU
+            configured = (settings.YOLO_DEVICE or 'auto').lower()
+            use_auto = configured == 'auto' or configured == 'cuda'
+            if use_auto and torch.cuda.is_available():
+                device = '0'
+                self.device = device
+                self.model.to('cuda')
+                try:
+                    torch.backends.cudnn.benchmark = True
+                    # half precision khi có thể để giảm độ trễ
+                    self.model.model.half()  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                logger.info(f"✓ YOLO running on GPU: {torch.cuda.get_device_name(0)} (auto)")
+            else:
+                device = 'cpu'
+                self.device = device
+                self.model.to('cpu')
+                if configured == 'cuda' and not torch.cuda.is_available():
+                    logger.warning("⚠️ CUDA không khả dụng, chuyển sang CPU")
+                else:
+                    logger.info("✓ YOLO running on CPU")
+
+            # Default thresholds
+            self.default_conf = settings.YOLO_CONF_DEFAULT
+            self.default_iou = settings.YOLO_IOU_DEFAULT
+
+            logger.info(f"✓ YOLO Detector initialized (LOCAL mode, device={device})")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to load YOLO model: {e}")
+            raise
+
+    def detect(self, frame: np.ndarray, conf: float = None, iou: float = None) -> List[Dict[str, Any]]:
         """
-        Phát hiện qua YOLO API
-        
+        Phát hiện đối tượng bằng model local
+
+        Args:
+            frame: BGR image (numpy array)
+            conf: Confidence threshold (None = dùng default từ config)
+            iou: IOU threshold (None = dùng default từ config)
+
         Returns:
             Danh sách detections: [{"bbox": [x1,y1,x2,y2], "confidence": 0.9, "class_name": "car"}, ...]
         """
-        return self.service.detect_vehicle(frame, conf=conf, iou=iou)
-    
+        if conf is None:
+            conf = self.default_conf
+        if iou is None:
+            iou = self.default_iou
+
+        try:
+            # Run inference (verbose=False để giảm logs)
+            results = self.model.predict(
+                source=frame,
+                conf=conf,
+                iou=iou,
+                device=self.device,
+                verbose=False,
+                stream=False
+            )
+
+            # Parse results
+            detections = []
+            if results and len(results) > 0:
+                result = results[0]
+                boxes = result.boxes
+
+                if boxes is not None and len(boxes) > 0:
+                    for box in boxes:
+                        # Get bbox coordinates
+                        xyxy = box.xyxy[0].cpu().numpy()  # [x1, y1, x2, y2]
+
+                        # Get confidence and class
+                        confidence = float(box.conf[0].cpu().numpy())
+                        class_id = int(box.cls[0].cpu().numpy())
+                        class_name = self.model.names[class_id]
+
+                        detections.append({
+                            "bbox": xyxy.tolist(),
+                            "confidence": confidence,
+                            "class_name": class_name,
+                            "class_id": class_id
+                        })
+
+            return detections
+
+        except Exception as e:
+            logger.error(f"Error during detection: {e}")
+            return []
+
     def draw_detections(self, frame: np.ndarray, detections: List[Dict]) -> np.ndarray:
         """Vẽ bounding boxes với màu sắc khác nhau cho mỗi class"""
         # Định nghĩa màu sắc cho mỗi loại phương tiện (BGR format)
@@ -41,32 +129,32 @@ class YOLODetector:
             'helmet': (255, 255, 255),   # White - Mũ bảo hiểm
             'no_helmet': (0, 0, 255),    # Red - Không mũ
         }
-        
+
         for det in detections:
             bbox = det.get("bbox")
             if not bbox or len(bbox) != 4:
                 continue
-            
+
             x1, y1, x2, y2 = map(int, bbox)
-            
+
             # Lấy thông tin class
             class_name = det.get('class_name', 'obj')
             confidence = det.get('confidence', 0)
             track_id = det.get('track_id')
-            
+
             # Chọn màu theo class, mặc định xám nếu không rõ
             color = CLASS_COLORS.get(class_name, (128, 128, 128))
-            
+
             # Xây dựng nhãn
-            if track_id:
+            if track_id is not None:
                 label = f"ID:{track_id} {class_name} {confidence:.2f}"
             else:
                 label = f"{class_name} {confidence:.2f}"
-            
+
             # Vẽ bbox và nhãn
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        
+
         return frame
 
 
