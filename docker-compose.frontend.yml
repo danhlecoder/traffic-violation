@@ -1,0 +1,20 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: traffic_frontend
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:3000:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    environment:
+      - NODE_ENV=production
+    networks:
+      - traffic_net
+
+networks:
+  traffic_net:
+    driver: bridge

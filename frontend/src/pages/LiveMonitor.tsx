@@ -1,21 +1,23 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Row, Col, Space, Select, Button, Grid, Card, Pagination } from 'antd'
-import { useStore, VIOLATION_TYPES, Violation, ViolationType } from '../store/useStore'
-import { streams } from '../services/api'
+import { useStore, Violation, ViolationType } from '../store/useStore'
+import { listCameras, getCameraDensity } from '../services/camera.service'
 import { confirmViolation, skipViolation, getViolations } from '../services/violations'
-import { sendZalo } from '../services/zalo'
+import { getViolationTypes } from '../constants/violations'
 import ViolationDetailModal from '../components/violations/ViolationDetailModal'
 import CameraTile from '../components/CameraTile'
 import OperationLog from '../components/OperationLog'
 import ViolationList from '../components/violations/ViolationList'
 import SectionHeader from '../components/SectionHeader'
 import { confirmAction } from '../utils/confirm'
+import { config } from '../config'
+
+type ConfirmPayload = { types?: ViolationType[]; vehicleType?: string | null; plate?: string | null }
 
 export default function LiveMonitor() {
   const settings = useStore((s) => s.settings)
-  const { cameras, zaloToken, zaloTargetId } = settings
-  const addViolation = useStore((s) => s.addViolation)
+  const { cameras } = settings
   const violations = useStore((s) => s.violations)
   const updateViolation = useStore((s) => s.updateViolation)
   const updateSettings = useStore((s) => s.updateSettings)
@@ -27,7 +29,16 @@ export default function LiveMonitor() {
   const [selectedCamIds, setSelectedCamIds] = useState<string[]>(settings.monitorSelectedCamIds)
   const [focusedCamId, setFocusedCamId] = useState<string | null>(settings.monitorFocusedCamId)
   const [currentPage, setCurrentPage] = useState(settings.monitorPage)
-  
+
+  const findLatestViolation = useCallback((seed: Violation): Violation | null => {
+    const { violations: all } = useStore.getState()
+    if (seed.trackId) {
+      const byTrack = all.find((item) => item.trackId === seed.trackId)
+      if (byTrack) return byTrack
+    }
+    return all.find((item) => item.id === seed.id) ?? null
+  }, [])
+
   // State lưu vehicle density cho mỗi camera
   const [vehicleDensities, setVehicleDensities] = useState<Record<string, number>>({})
 
@@ -41,68 +52,120 @@ export default function LiveMonitor() {
     })
   }, [showAll, selectedCamIds, focusedCamId, currentPage, updateSettings])
 
-  // Khi khởi động trang, cố gắng tải danh sách camera và vùng vẽ từ backend nếu có
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await streams.listCameras()
-        // Thay vì merge, đồng bộ tuyệt đối theo server để tránh rác khi đã xóa DB
-        const cams = (list || []).map((c) => ({ id: c.id, name: c.name, rtsp: c.rtsp, location: c.location }))
-        const regionsMap: any = {}
-        for (const cam of list || []) {
-          if (cam.regions) regionsMap[cam.id] = cam.regions
-        }
-        updateSettings({ cameras: cams, cameraRegions: regionsMap })
-      } catch {}
-    })()
-  }, [updateSettings])
+const fetchCameras = useCallback(async () => {
+  try {
+    const list = await listCameras()
+    const cams = (list || []).map((c) => ({ id: c.id, name: c.name, rtsp: c.rtsp, location: c.location }))
+    const regionsMap: any = {}
+    for (const cam of list || []) {
+      if (cam.regions) regionsMap[cam.id] = cam.regions
+    }
+    updateSettings({ cameras: cams, cameraRegions: regionsMap })
+  } catch (error) {
+    console.error('Lỗi tải danh sách camera:', error)
+  }
+}, [updateSettings])
 
-  // Fetch violations từ backend
-  useEffect(() => {
-    const fetchViolations = async () => {
-      try {
-        const response = await getViolations({ limit: 100, status: 'detected' })
-        
-        const violationsFromAPI: Violation[] = response.data.map((v) => ({
+useEffect(() => {
+  void fetchCameras()
+}, [fetchCameras])
+
+  // Lắng nghe SSE camera events để làm tươi ngay khi có thay đổi
+useEffect(() => {
+  if (typeof window === 'undefined') return
+  const timer = window.setInterval(() => {
+    void fetchCameras()
+  }, config.polling.cameras)
+  return () => window.clearInterval(timer)
+}, [fetchCameras])
+
+  // Fetch violations từ DB và tự động refresh để hiển thị violations mới (không cần click)
+  const setViolations = useStore((s) => s.setViolations)
+
+  const refreshViolationsFromDB = async () => {
+    try {
+      // Chỉ lấy violations chưa xử lý (status = detected)
+      const response = await getViolations({ limit: 100, status: 'detected' })
+
+      // Map backend violation_tags to frontend type
+      const mapViolationType = (backendType: string): ViolationType => {
+        const typeMap: Record<string, ViolationType> = {
+          detected: 'Phát hiện',
+          'stopline_crossing': 'Phát hiện',
+          'red_light': 'Vượt đèn đỏ',
+          'no_helmet': 'Không đội mũ',
+          'speed_violation': 'Quá tốc độ',
+        }
+        return typeMap[backendType] || 'Phát hiện'
+      }
+
+      const violationsFromAPI: Violation[] = (response.data || []).map((v) => {
+        // Chỉ dùng violation_tags
+        const rawTags = Array.isArray(v.violation_tags) && v.violation_tags.length
+          ? v.violation_tags
+          : ['detected']
+
+        const tagLabels = rawTags
+          .map(mapViolationType)
+          .filter(Boolean) as ViolationType[]
+
+        const violationHistory = Array.isArray(v.violation_history)
+          ? v.violation_history.map((entry) => ({
+              type: entry?.type ? mapViolationType(entry.type) : undefined,
+              timestamp: entry?.timestamp,
+              speed: entry?.speed,
+            }))
+          : undefined
+
+        return {
           id: v.id,
           time: v.timestamp,
           cameraId: v.camera_id,
           cameraName: v.camera_name || `Camera ${v.camera_id}`,
           location: v.location || 'Không rõ',
           vehicleType: v.vehicle_type,
-          plate: v.license_plate,
+          plate: v.license_plate || '',
           confidence: v.confidence,
-          type: 'Phát hiện',
+          trackId: v.track_id,
+          speed: v.speed,
+          type: tagLabels[0] ?? 'Phát hiện',
+          types: tagLabels,
           status: 'Mới',
           images: {
-            overview: v.images.full_frame || '',
-            vehicle: v.images.vehicle_crop || '',
-            plate: v.images.plate_crop || '',
+            overview: v.images?.full_frame || '',
+            vehicle: v.images?.vehicle_crop || '',
+            plate: v.images?.plate_crop || '',
           },
-        }))
-        
-        for (const violation of violationsFromAPI) {
-          addViolation(violation)
+          violationHistory,
         }
-      } catch (e) {
-        console.error('Lỗi fetch violations:', e)
-      }
-    }
-    
-    fetchViolations()
-    const interval = setInterval(fetchViolations, 5000)
-    return () => clearInterval(interval)
-  }, [addViolation])
+      })
 
+      // Đồng bộ với DB: chỉ giữ lại violations đã confirm/skip, thay thế toàn bộ violations 'Mới'
+      const currentViolations = useStore.getState().violations
+      const existingConfirmed = currentViolations.filter(v => v.status !== 'Mới')
+      setViolations([...existingConfirmed, ...violationsFromAPI])
+    } catch (e) {
+      console.error('Lỗi fetch violations:', e)
+    }
+  }
+
+  useEffect(() => {
+    // Fetch khi mount
+    refreshViolationsFromDB()
+
+    // Tự động refresh mỗi 5 giây để hiển thị violations mới (không cần click)
+    const interval = setInterval(refreshViolationsFromDB, 5000)
+    return () => clearInterval(interval)
+  }, [setViolations])
   // Poll vehicle density từ backend mỗi 2 giây
   useEffect(() => {
     if (!cameras || cameras.length === 0) return
-    
+
     const fetchDensities = async () => {
       const densities: Record<string, number> = {}
       for (const cam of cameras) {
         try {
-          const info = await streams.getCameraDensity(cam.rtsp)
+          const info = await getCameraDensity(cam.rtsp)
           densities[cam.id] = info.count
         } catch {
           densities[cam.id] = 0
@@ -110,62 +173,144 @@ export default function LiveMonitor() {
       }
       setVehicleDensities(densities)
     }
-    
+
     fetchDensities() // Gọi ngay lần đầu
     const interval = setInterval(fetchDensities, 2000) // Poll mỗi 2 giây
     return () => clearInterval(interval)
   }, [cameras])
 
   const [filter, setFilter] = useState<'Tất cả' | ViolationType>('Tất cả')
-  const pendingList = useMemo(() => violations.filter(v => v.status === 'Mới').slice(0, 50), [violations])
-  const filtered = useMemo(() => (filter === 'Tất cả' ? pendingList : pendingList.filter(v => v.type === filter)), [pendingList, filter])
+  const pendingList = useMemo(() => {
+    const filtered = violations.filter(v => v.status === 'Mới')
+    // Sort: mới nhất trên cùng (timestamp giảm dần)
+    const sorted = filtered.sort((a, b) => {
+      const timeA = new Date(a.time).getTime()
+      const timeB = new Date(b.time).getTime()
+      // Nếu timestamp không hợp lệ, dùng string comparison
+      if (isNaN(timeA) || isNaN(timeB)) {
+        return b.time.localeCompare(a.time)
+      }
+      return timeB - timeA // Giảm dần: mới nhất trước
+    })
+    return sorted.slice(0, 50)
+  }, [violations])
+  const filtered = useMemo(() => (
+    filter === 'Tất cả'
+      ? pendingList
+      : pendingList.filter((v) => getViolationTypes(v).includes(filter))
+  ), [pendingList, filter])
   const screens = Grid.useBreakpoint()
   const isMobile = !screens.md
 
   const counts = useMemo(() => {
     const pending = violations.filter(v => v.status === 'Mới')
     const total = pending.length
-    const red = pending.filter(v => v.type === 'Vượt đèn đỏ').length
-    const speed = pending.filter(v => v.type === 'Quá tốc độ').length
-    const helmet = pending.filter(v => v.type === 'Không đội mũ').length
+    const red = pending.filter(v => getViolationTypes(v).includes('Vượt đèn đỏ')).length
+    const speed = pending.filter(v => getViolationTypes(v).includes('Quá tốc độ')).length
+    const helmet = pending.filter(v => getViolationTypes(v).includes('Không đội mũ')).length
     return { total, red, speed, helmet }
   }, [violations])
 
-  async function onConfirm(v: Violation): Promise<boolean> {
+  async function onConfirm(v: Violation, payload?: ConfirmPayload): Promise<boolean> {
     const ok = await confirmAction('Xác nhận vi phạm này?')
     if (!ok) return false
-    await confirmViolation(v.id)
-    updateViolation(v.id, { status: 'Đã xác nhận' })
-    toast.success('Đã xác nhận vi phạm')
+    if (!v.trackId) {
+      toast.error('Không có track_id để xác nhận')
+      return false
+    }
+    const updatedTypes = (payload?.types && payload.types.length
+      ? payload.types
+      : (() => {
+          const arr = getViolationTypes(v)
+          return (arr.length ? arr : [v.type]) as ViolationType[]
+        })())
+    const payloadHasVehicle = payload ? Object.prototype.hasOwnProperty.call(payload, 'vehicleType') : false
+    const payloadHasPlate = payload ? Object.prototype.hasOwnProperty.call(payload, 'plate') : false
+    const updatedVehicleType = payloadHasVehicle ? (payload?.vehicleType ?? undefined) : v.vehicleType
+    const updatedPlate = payloadHasPlate ? (payload?.plate ?? '') : v.plate
+    updateViolation(v.id, {
+      status: 'Đã xác nhận',
+      types: updatedTypes,
+      type: updatedTypes[0] ?? v.type,
+      vehicleType: updatedVehicleType,
+      plate: updatedPlate,
+    })
+    await confirmViolation(v.trackId)
+    // Refresh violations từ DB sau khi confirm
+    await refreshViolationsFromDB()
+
+    // Cập nhật local state ngay lập tức
+    updateViolation(v.id, {
+      status: 'Đã xác nhận',
+      types: updatedTypes,
+      type: updatedTypes[0] ?? v.type,
+      vehicleType: updatedVehicleType,
+      plate: updatedPlate,
+    })
+
+    // Đóng modal ngay sau khi xác nhận thành công
+    setSelected(null)
     useStore.getState().addOperationLog({
       id: `${v.id}-confirm-${Date.now()}`,
       timestamp: new Date().toISOString(),
       user: '',
       action: 'confirm',
-      violationType: v.type,
-      plate: v.plate,
+      violationTypes: updatedTypes as ViolationType[],
+      trackId: v.trackId,
+      plate: updatedPlate,
       camera: v.cameraName,
       details: 'Xác nhận vi phạm'
     })
-    if (zaloToken && zaloTargetId) {
-      await sendZalo(v, zaloToken, zaloTargetId)
-    }
     return true
   }
 
-  async function onSkip(v: Violation): Promise<boolean> {
+  async function onSkip(v: Violation, payload?: ConfirmPayload): Promise<boolean> {
     const ok = await confirmAction('Bỏ qua vi phạm này?')
     if (!ok) return false
-    await skipViolation(v.id)
-    updateViolation(v.id, { status: 'Đã bỏ qua' })
-    toast('Đã bỏ qua', { icon: '🗑️' })
+    if (!v.trackId) {
+      toast.error('Không có track_id để bỏ qua')
+      return false
+    }
+    const updatedTypes = (payload?.types && payload.types.length
+      ? payload.types
+      : (() => {
+          const arr = getViolationTypes(v)
+          return (arr.length ? arr : [v.type]) as ViolationType[]
+        })())
+    const payloadHasVehicle = payload ? Object.prototype.hasOwnProperty.call(payload, 'vehicleType') : false
+    const payloadHasPlate = payload ? Object.prototype.hasOwnProperty.call(payload, 'plate') : false
+    const updatedVehicleType = payloadHasVehicle ? (payload?.vehicleType ?? undefined) : v.vehicleType
+    const updatedPlate = payloadHasPlate ? (payload?.plate ?? '') : v.plate
+    updateViolation(v.id, {
+      status: 'Đã bỏ qua',
+      types: updatedTypes,
+      type: updatedTypes[0] ?? v.type,
+      vehicleType: updatedVehicleType,
+      plate: updatedPlate,
+    })
+    await skipViolation(v.trackId)
+    // Refresh violations từ DB sau khi skip
+    await refreshViolationsFromDB()
+
+    // Cập nhật local state ngay lập tức
+    updateViolation(v.id, {
+      status: 'Đã bỏ qua',
+      types: updatedTypes,
+      type: updatedTypes[0] ?? v.type,
+      vehicleType: updatedVehicleType,
+      plate: updatedPlate,
+    })
+
+    // Đóng modal ngay sau khi bỏ qua thành công
+    setSelected(null)
     useStore.getState().addOperationLog({
       id: `${v.id}-skip-${Date.now()}`,
       timestamp: new Date().toISOString(),
       user: '',
       action: 'skip',
-      violationType: v.type,
-      plate: v.plate,
+      violationTypes: updatedTypes as ViolationType[],
+      trackId: v.trackId,
+      plate: updatedPlate,
       camera: v.cameraName,
       details: 'Bỏ qua vi phạm'
     })
@@ -194,6 +339,31 @@ export default function LiveMonitor() {
     const pages = Math.max(1, Math.ceil(uniq.length / CAMERAS_PER_PAGE))
     return { allCams: uniq, totalPages: pages }
   }, [cameras, selectedCamIds, showAll, focusedCamId])
+
+  // Đảm bảo trang hiện tại luôn hợp lệ khi số lượng camera thay đổi
+  useEffect(() => {
+    if (currentPage > 0 && currentPage >= totalPages) {
+      setCurrentPage(Math.max(0, totalPages - 1))
+    }
+  }, [totalPages, currentPage])
+
+  // Nếu đang focus vào cam không tồn tại nữa → bỏ focus
+  useEffect(() => {
+    if (focusedCamId && !cameras.find(c => c.id === focusedCamId)) {
+      setFocusedCamId(null)
+    }
+  }, [cameras, focusedCamId])
+
+  // Làm sạch danh sách chọn nếu có ID không còn tồn tại
+  useEffect(() => {
+    if (selectedCamIds.length > 0) {
+      const validIds = new Set(cameras.map(c => c.id))
+      const filtered = selectedCamIds.filter(id => validIds.has(id))
+      if (filtered.length !== selectedCamIds.length) {
+        setSelectedCamIds(filtered)
+      }
+    }
+  }, [cameras, selectedCamIds])
 
   const displayCams = useMemo(() => {
     const start = currentPage * CAMERAS_PER_PAGE
@@ -277,27 +447,31 @@ export default function LiveMonitor() {
 
           {/* Nhật ký thao tác */}
           <div style={{ height: '200px' }}>
-            <OperationLog onSelect={({ plate, violationType, camera }) => {
-              // Tìm vi phạm phù hợp nhất để mở modal chi tiết
-              let candidate: Violation | undefined = undefined
-              if (plate) {
-                candidate = pendingList.find(v => v.plate === plate)
+            <OperationLog onSelect={({ trackId, plate, violationTypes, camera }) => {
+              const allViolations = useStore.getState().violations
+              let candidate: Violation | undefined
+              if (trackId) {
+                candidate = allViolations.find((item) => item.trackId === trackId)
               }
-              if (!candidate && violationType) {
-                // Ưu tiên khớp theo loại + camera
-                candidate = pendingList.find(v => v.type === violationType && (!camera || v.cameraName === camera))
+              if (!candidate && plate) {
+                candidate = allViolations.find((item) => item.plate && item.plate === plate)
               }
-              if (!candidate && violationType) {
-                // Fallback: bất kỳ vi phạm cùng loại gần nhất
-                candidate = pendingList.find(v => v.type === violationType)
+              const requested = violationTypes && violationTypes.length ? new Set(violationTypes) : undefined
+              if (!candidate && requested) {
+                candidate = allViolations.find((item) => {
+                  const labels = getViolationTypes(item)
+                  const matchType = labels.some((label) => requested.has(label))
+                  return matchType && (!camera || item.cameraName === camera)
+                })
+              }
+              if (!candidate && requested) {
+                candidate = pendingList.find((item) => getViolationTypes(item).some((label) => requested.has(label)))
               }
               if (!candidate) {
-                // Fallback cuối: phần tử gần nhất
-                candidate = pendingList[0]
+                candidate = pendingList[0] ?? allViolations.find((item) => item.status === 'Mới')
               }
-              setSelected(candidate ?? null)
-              // Đặt cờ read-only khi mở từ nhật ký
-              setModalReadOnly(true)
+              setSelected(candidate ? { ...candidate } : null)
+              setModalReadOnly(candidate ? candidate.status !== 'Mới' : true)
             }} />
           </div>
         </div>
@@ -351,8 +525,8 @@ export default function LiveMonitor() {
         open={!!selected}
         onClose={() => setSelected(null)}
         data={selected ?? undefined}
-        onConfirm={async () => (selected ? await onConfirm(selected) : false)}
-        onSkip={async () => (selected ? await onSkip(selected) : false)}
+        onConfirm={async (payload) => (selected ? await onConfirm(selected, payload) : false)}
+        onSkip={async (payload) => (selected ? await onSkip(selected, payload) : false)}
         readOnly={modalReadOnly}
       />
     </Row>

@@ -1,5 +1,5 @@
 """
-Logger - Cấu hình logging cho ứng dụng
+Logger - Cấu Hình Logging Cho Ứng Dụng
 """
 
 import logging
@@ -85,7 +85,7 @@ def _ensure_file_handler(logger: logging.Logger) -> None:
         print(f"Không thể tạo file handler: {e}")
 
 
-# === Tạo các logger chính ===
+# Tạo các logger chính
 app_logger = _create_logger("traffic.app")
 stream_logger = _create_logger("traffic.stream")
 detector_logger = _create_logger("traffic.detector")

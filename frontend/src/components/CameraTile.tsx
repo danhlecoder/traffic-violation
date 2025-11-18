@@ -1,8 +1,7 @@
 import { Badge, Typography, Tag, Button, Tooltip } from 'antd'
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { EditOutlined } from '@ant-design/icons'
-import { buildStreamUrl } from '../services/streams'
-import { streams } from '../services/api'
+import { getStreamUrl, updateCameraRegions } from '../services/camera.service'
 import RegionEditorModal from './RegionEditorModal'
 import RegionOverlay from './RegionOverlay'
 import { useStore } from '../store/useStore'
@@ -33,13 +32,17 @@ export default function CameraTile({
   const { ref: containerRef, toPixel } = useElementScaler<HTMLDivElement>()
   const [editorOpen, setEditorOpen] = useState(false)
   const [snapshot, setSnapshot] = useState<string | undefined>(undefined)
+  const [imgError, setImgError] = useState<string | null>(null)
   const autoDetectRanRef = useRef(false)
   const autoDetectingRef = useRef(false)
   const regions = useStore((s) => s.settings.cameraRegions)
   const setCameraRegion = useStore((s) => s.setCameraRegion)
   const cameraRegion = regions[cameraId] || {}
 
-  const streamSrc = useMemo(() => (rtsp ? buildStreamUrl(rtsp) : undefined), [rtsp])
+  const streamSrc = useMemo(() => (rtsp ? getStreamUrl(rtsp) : undefined), [rtsp])
+
+  // Reset lỗi khi nguồn thay đổi
+  useEffect(() => { setImgError(null) }, [streamSrc])
 
   // Tự động chụp khung đầu và detect khi stream sẵn sàng (chỉ khi chưa có line)
   const tryAutoDetectFromStream = useCallback(async (): Promise<boolean> => {
@@ -60,7 +63,7 @@ export default function CameraTile({
       ctx.drawImage(img, 0, 0, w, h)
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
       const apiBase = (import.meta as any)?.env?.VITE_API_BASE || `${window.location.protocol}//${window.location.hostname}:8000`
-      const resp = await fetch(`${apiBase}/api/detect/stopline`, {
+      const resp = await fetch(`${apiBase}/v1/detection/stopline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUrl }),
@@ -68,18 +71,10 @@ export default function CameraTile({
       if (!resp.ok) throw new Error('auto detect failed')
       const data = await resp.json()
       const line = data?.stopLine
-      const lineB = data?.lineB
-      const roi = data?.roi
       if (line && line.length === 2) {
         const payload: any = { stopLine: line }
-        if (lineB && lineB.length === 2) {
-          payload.lineB = lineB
-        }
-        if (roi && roi.length >= 3) {
-          payload.roi = roi
-        }
         setCameraRegion(cameraId, payload)
-        try { await streams.updateCameraRegions(cameraId, payload) } catch {}
+        try { await updateCameraRegions(cameraId, payload) } catch {}
         autoDetectRanRef.current = true
         return true
       }
@@ -124,7 +119,7 @@ export default function CameraTile({
   }, [rtsp])
 
   // Gắn sự kiện khi stream sẵn sàng để thử auto-detect một lần
-  const onStreamLoad = useCallback(() => {
+  const onStreamLoad = useCallback(async () => {
     // Thử ngay và nếu chưa thành công, thử lại trong vài nhịp (do MJPEG có thể chưa ổn định)
     let attempts = 0
     const maxAttempts = 10
@@ -135,6 +130,8 @@ export default function CameraTile({
     }
     void tick()
   }, [tryAutoDetectFromStream])
+
+  // Không tự động sinh/điều chỉnh lineB ở frontend nữa; backend chịu trách nhiệm tính toán và lưu.
 
   // Revoke blob URL when modal closes or component unmounts
   useEffect(() => {
@@ -165,17 +162,31 @@ export default function CameraTile({
     <>
     <div className={`camera-tile ${focused ? 'focused' : ''}`} onDoubleClick={onDoubleClick} title="Nhấp đúp để phóng to/thu nhỏ" style={{ cursor: focused ? 'zoom-out' : 'zoom-in' }}>
       <div className="camera-stream" style={height ? { height } : undefined} ref={containerRef}>
-        {ready && streamSrc ? (
+        {ready && streamSrc && !imgError ? (
           <img
             crossOrigin="anonymous"
             src={streamSrc}
             alt={name}
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             onLoad={onStreamLoad}
+            onError={() => setImgError('Không thể tải stream')}
           />
         ) : (
           <div className="camera-stream-inner">
-            <div className="camera-stream-text">Chưa cấu hình stream</div>
+            <div className="camera-stream-text">
+              {imgError ? (
+                <>
+                  <div>Không thể tải stream</div>
+                  {streamSrc && (
+                    <div style={{ marginTop: 6 }}>
+                      <a href={streamSrc} target="_blank" rel="noreferrer">Mở stream trong tab mới</a>
+                    </div>
+                  )}
+                </>
+              ) : (
+                'Chưa cấu hình stream'
+              )}
+            </div>
           </div>
         )}
 

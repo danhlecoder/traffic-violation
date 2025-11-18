@@ -24,6 +24,7 @@ export function violationTypeToTagColor(t: string): 'red' | 'cyan' | 'gold' {
 
 export function getViolationTypes(v: Partial<Violation> & { types?: string[] }): string[] {
   if (Array.isArray(v?.types) && v.types.length) return v.types
+  if (Array.isArray((v as any)?.violationTags) && (v as any).violationTags.length) return (v as any).violationTags as string[]
   if (v?.type) return [v.type]
   return []
 }

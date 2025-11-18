@@ -1,0 +1,38 @@
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: traffic_mongo
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: traffic
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - traffic_net
+
+  mongo_api:
+    build:
+      context: ./mongo-service
+      dockerfile: Dockerfile
+    container_name: traffic_mongo_api
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8002:8002"
+    env_file:
+      - ./mongo-service/.env
+    depends_on:
+      - mongo
+    networks:
+      - traffic_net
+
+networks:
+  traffic_net:
+    driver: bridge
+
+volumes:
+  mongo_data:
+    driver: local

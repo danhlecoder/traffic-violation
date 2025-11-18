@@ -7,49 +7,49 @@ import { config } from '../config'
 import type { Camera, CameraRegion, VehicleDensity } from '../types/api'
 
 /**
- * Get stream URL for a camera
+ * Lấy stream URL cho camera
  */
 export function getStreamUrl(rtsp: string): string {
-  return `${config.apiBase}/api/stream?src=${encodeURIComponent(rtsp)}`
+  return `${config.apiBase}/v1/stream?src=${encodeURIComponent(rtsp)}`
 }
 
 /**
- * List all cameras
+ * Lấy danh sách tất cả cameras
  */
 export async function listCameras(): Promise<Camera[]> {
-  return apiClient.get<Camera[]>('/api/cameras')
+  return apiClient.get<Camera[]>('/v1/cameras')
 }
 
 /**
- * Get single camera by ID
+ * Lấy chi tiết một camera theo ID
  */
 export async function getCamera(id: string): Promise<Camera> {
-  return apiClient.get<Camera>(`/api/cameras/${encodeURIComponent(id)}`)
+  return apiClient.get<Camera>(`/v1/cameras/${encodeURIComponent(id)}`)
 }
 
 /**
- * Create or update camera
+ * Tạo hoặc cập nhật camera
  */
 export async function upsertCamera(camera: Camera): Promise<void> {
-  await apiClient.post('/api/cameras', camera)
+  await apiClient.post('/v1/cameras', camera)
 }
 
 /**
- * Update camera regions (stopLine, ROI)
+ * Cập nhật ROI/stopline cho camera
  */
 export async function updateCameraRegions(
   id: string,
   regions: CameraRegion
 ): Promise<void> {
-  await apiClient.put(`/api/cameras/${encodeURIComponent(id)}/regions`, regions)
+  await apiClient.put(`/v1/cameras/${encodeURIComponent(id)}/regions`, regions)
 }
 
 /**
- * Delete camera
+ * Xóa camera theo ID
  */
 export async function deleteCamera(id: string): Promise<void> {
   try {
-    await apiClient.delete(`/api/cameras/${encodeURIComponent(id)}`)
+    await apiClient.delete(`/v1/cameras/${encodeURIComponent(id)}`)
   } catch (error: any) {
     // 404 = already deleted, treat as success
     if (error.status !== 404) throw error
@@ -57,10 +57,26 @@ export async function deleteCamera(id: string): Promise<void> {
 }
 
 /**
- * Get vehicle density for a camera
+ * Lấy mật độ phương tiện cho stream
  */
 export async function getCameraDensity(rtsp: string): Promise<VehicleDensity> {
   return apiClient.get<VehicleDensity>(
-    `/api/density/camera?src=${encodeURIComponent(rtsp)}`
+    `/v1/stream/density?src=${encodeURIComponent(rtsp)}`
   )
+}
+
+/**
+ * Cập nhật detection rules cho camera
+ */
+export async function updateCameraDetectionRules(
+  id: string,
+  rules: {
+    speedLimit?: number
+    minConfidence?: number
+    enableRedLightCheck?: boolean
+    enableHelmetCheck?: boolean
+    enableSpeedCheck?: boolean
+  }
+): Promise<void> {
+  await apiClient.put(`/v1/cameras/${encodeURIComponent(id)}/detection-rules`, rules)
 }

@@ -1,9 +1,9 @@
-"""
-Image Processing Utilities
+"""  
+Tiện Ích Xử Lý Ảnh
 
 Chức năng:
-- Base64 encoding
-- Image cropping với bbox
+- Mã hóa Base64
+- Cắt ảnh với bbox
 """
 
 from typing import Tuple, Optional, List
@@ -19,7 +19,7 @@ Point = Tuple[float, float]
 
 def crop_bbox(frame: np.ndarray, bbox: List[float], padding: int = 5) -> Optional[np.ndarray]:
     """
-    Crop bbox từ frame với padding
+    Cắt bbox từ frame với padding
     
     Args:
         frame: Frame gốc
@@ -27,19 +27,19 @@ def crop_bbox(frame: np.ndarray, bbox: List[float], padding: int = 5) -> Optiona
         padding: Padding thêm (pixel)
         
     Returns:
-        Cropped image hoặc None nếu invalid
+        Ảnh đã cắt hoặc None nếu invalid
     """
     try:
         h, w = frame.shape[:2]
         x1, y1, x2, y2 = [int(v) for v in bbox]
         
-        # Add padding
+        # Thêm padding
         x1 = max(0, x1 - padding)
         y1 = max(0, y1 - padding)
         x2 = min(w, x2 + padding)
         y2 = min(h, y2 + padding)
         
-        # Validate
+        # Kiểm tra
         if x2 <= x1 or y2 <= y1:
             return None
         
@@ -53,24 +53,24 @@ def crop_bbox(frame: np.ndarray, bbox: List[float], padding: int = 5) -> Optiona
 
 def encode_image_base64(img: np.ndarray, quality: int = 85) -> Optional[str]:
     """
-    Encode ảnh sang base64 JPEG
+    Mã hóa ảnh sang base64 JPEG
     
     Args:
         img: Ảnh numpy array
         quality: Chất lượng JPEG (0-100)
         
     Returns:
-        Base64 string hoặc None nếu lỗi
+        Chuỗi Base64 hoặc None nếu lỗi
     """
     try:
         if img is None or img.size == 0:
             return None
             
-        # Encode JPEG
+        # Mã hóa JPEG
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
         _, buffer = cv2.imencode('.jpg', img, encode_param)
         
-        # Convert to base64
+        # Chuyển sang base64
         img_base64 = base64.b64encode(buffer).decode('utf-8')
         return f"data:image/jpeg;base64,{img_base64}"
         
@@ -148,7 +148,7 @@ def center_crop_to_16_9(frame_bgr: np.ndarray) -> np.ndarray:
         frame_bgr: Frame ảnh BGR
     
     Returns:
-        Frame đã crop về 16:9
+        Frame đã cắt về 16:9
     """
     if frame_bgr is None or frame_bgr.size == 0:
         return frame_bgr

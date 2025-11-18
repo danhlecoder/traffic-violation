@@ -1,44 +1,42 @@
 """
-Application Startup/Shutdown Logic
+Logic Khởi Động/Tắt Ứng Dụng
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ..config.config import settings
-from ..utils.database import init_indexes, close_connection
-from ..core.detection.yolo import get_yolo_detector
+from .clients.mongodb_service import get_mongodb_service
 from ..utils.logger import app_logger as logger
+from ..core.events.violation_broker import get_violation_event_broker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifecycle manager: Khởi tạo và dọn dẹp tài nguyên
+    Quản lý Lifecycle: Kiểm tra các dịch vụ bên ngoài
     """
-    # STARTUP
+    # KHỞI ĐỘNG
     logger.info("🚀 Starting Traffic Violation Detection System")
-    
-    try:
-        init_indexes()
-        logger.info("✓ Database ready")
-    except Exception as e:
-        logger.error(f"Database init failed: {e}")
 
+    # Kiểm tra MongoDB API
     try:
-        get_yolo_detector()
-        logger.info("✓ YOLO detector ready")
+        mongodb_service = get_mongodb_service()
+        if mongodb_service.health_check():
+            logger.info("✓ MongoDB API connected")
+        else:
+            logger.warning("⚠ MongoDB API not available")
     except Exception as e:
-        logger.warning(f"YOLO init failed: {e}")
+        logger.warning(f"MongoDB API check failed: {e}")
 
-    logger.info(f"✓ Server ready at {settings.HOST}:{settings.PORT}")
-    
+    loop = asyncio.get_running_loop()
+    get_violation_event_broker().set_loop(loop)
+    logger.info("✓ Violation event broker attached to event loop")
+
+    logger.info(f"✓ Backend ready at {settings.HOST}:{settings.PORT}")
+
     yield
-    
-    # SHUTDOWN
-    logger.info("🛑 Shutting down server")
-    try:
-        close_connection()
-        logger.info("✓ Database closed")
-    except Exception as e:
-        logger.error(f"Shutdown error: {e}")
+
+    # TẮT
+    logger.info("🛑 Shutting down backend")

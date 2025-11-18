@@ -21,6 +21,7 @@ Hệ thống phát hiện vi phạm giao thông sử dụng YOLO và Computer Vi
 - **🗄️ MongoDB Integration**: Lưu trữ cấu hình và dữ liệu
 - **🌐 RESTful API**: FastAPI với OpenAPI docs
 - **🎨 Modern UI**: React + TypeScript frontend
+- **🤖 N8N Automation**: Workflow automation và tích hợp
 
 ### 🔜 Sắp có
 
@@ -60,7 +61,9 @@ traffic-violation/
 - MongoDB 5.0+
 - Docker (khuyến nghị)
 
-### Cài đặt nhanh với Docker
+### 📦 Option 1: Single Server (Khuyến nghị cho dev/test)
+
+Deploy tất cả service trên 1 server duy nhất.
 
 ```bash
 # 1. Clone repository
@@ -68,18 +71,79 @@ git clone <repo-url>
 cd traffic-violation
 
 # 2. Đặt YOLO model
-mkdir -p backend/model
-cp /path/to/best.pt backend/model/
+mkdir -p backend/models
+# Copy best1.pt và license_plate.pt vào backend/models/
 
-# 3. Chạy Docker Compose
-docker compose up -d --build
+# 3. Deploy tất cả services
+bash run.sh up
 
 # 4. Truy cập ứng dụng
-# Frontend: http://localhost:5173
-# Backend: http://localhost:8000
+# Frontend: http://localhost:3000
+# Backend: http://localhost:8000 (YOLO tích hợp sẵn)
+# N8N Automation: http://localhost:8001 (user: admin, pass: admin123)
+# Mongo API: http://localhost:8002
 ```
 
-### Cài đặt thủ công
+### 🌐 Option 2: Multi-Server (Khuyến nghị cho production)
+
+Deploy từng service lên server riêng biệt với IP khác nhau.
+
+**Kiến trúc:**
+- Server 1 (192.168.1.10): MongoDB + Mongo API
+- Server 2 (192.168.1.30): Backend API (YOLO tích hợp sẵn)
+- Server 3 (192.168.1.40): Frontend Web
+- Server 4 (192.168.1.50): N8N Automation (optional)
+
+**Bước 1: Chuẩn bị config (chạy 1 lần)**
+
+```bash
+# Backend (Server 3): Copy và sửa file .env
+cp backend/.env.multi-server backend/.env
+nano backend/.env
+# Sửa: YOLO_API_URL, MONGO_API_URL
+
+# Frontend (Server 4): Copy và sửa file .env
+cp frontend/.env.example frontend/.env.production.local
+nano frontend/.env.production.local
+# Sửa: VITE_API_BASE_URL
+```
+
+**Bước 2: Deploy từng server (theo thứ tự)**
+
+```bash
+# Server 1: MongoDB
+bash deploy-scripts/deploy-server1-mongo.sh
+
+# Server 2: YOLO (đảm bảo có model files)
+bash deploy-scripts/deploy-server2-yolo.sh
+
+# Server 3: Backend (đảm bảo đã sửa .env)
+bash deploy-scripts/deploy-server3-backend.sh
+
+# Server 4: Frontend (đảm bảo đã sửa .env.production.local)
+bash deploy-scripts/deploy-server4-frontend.sh
+
+
+# Server 1
+sudo ufw allow 27017/tcp 8002/tcp
+
+# Server 2
+sudo ufw allow 8000/tcp
+
+# Server 3
+sudo ufw allow 3000/tcp
+
+# Server 4 (optional - N8N)
+sudo ufw allow 8001/tcp
+```
+
+**Hướng dẫn chi tiết:**
+- ⚡ [DEPLOY_NHANH.md](DEPLOY_NHANH.md) - Deploy nhanh, từng bước
+- 🔧 [HUONG_DAN_DOI_IP.md](HUONG_DAN_DOI_IP.md) - Chỉ hướng dẫn đổi IP
+- 📘 [DEPLOY_MULTI_SERVER.md](DEPLOY_MULTI_SERVER.md) - Hướng dẫn đầy đủ
+- 📋 [QUICK_REFERENCE_MULTI_SERVER.md](QUICK_REFERENCE_MULTI_SERVER.md) - Tham khảo nhanh
+
+### Cài đặt thủ công (không dùng Docker)
 
 Xem hướng dẫn chi tiết tại [QUICK_START.md](QUICK_START.md)
 

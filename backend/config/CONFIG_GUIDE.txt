@@ -1,0 +1,41 @@
+╔══════════════════════════════════════════════════════════════════╗
+║          HƯỚNG DẪN CẤU HÌNH BACKEND - PHÂN CHIA RÕ RÀNG         ║
+╚══════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────┐
+│ 📁 server.yaml - CẤU HÌNH TĨNH (Infrastructure)                 │
+└──────────────────────────────────────────────────────────────────┘
+
+✓ Địa chỉ API services (YOLO, MongoDB)
+✓ Server host/port  
+✓ Logging configuration
+✓ Database connection
+✓ Model file paths
+
+📌 Khi nào sửa: Deploy server mới, thay đổi địa chỉ services
+
+
+┌──────────────────────────────────────────────────────────────────┐
+│ ⚙️ .env - THAM SỐ ĐIỀU CHỈNH (Performance Tuning)               │
+└──────────────────────────────────────────────────────────────────┘
+
+✓ Stream FPS/Quality
+✓ Detection thresholds
+✓ Tracking parameters
+✓ Vision tuning (Canny, Hough, ROI)
+✓ Density thresholds
+
+📌 Khi nào sửa: Tối ưu hiệu năng, fine-tune detection
+
+
+╔══════════════════════════════════════════════════════════════════╗
+║                         QUICK REFERENCE                          ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Stream bị lag?           → .env: Giảm STREAM_DEFAULT_FPS
+Detection quá chậm?      → .env: Tăng STREAM_SKIP_FRAMES
+False positive nhiều?    → .env: Tăng TRACKER_IOU_THRESHOLD
+Đổi địa chỉ YOLO API?    → server.yaml: services.yolo_api
+Deploy lên server mới?   → server.yaml: Đổi tất cả URLs
+
+╔══════════════════════════════════════════════════════════════════╗
