@@ -19,33 +19,31 @@ services:
 
 # YOLO Vehicle Detection (Local Model)
 yolo_vehicle:
-  model_path: /app/backend/models/best1.pt
+  model_path: /app/backend/models/best.pt
   conf_threshold: 0.5
   iou_threshold: 0.45
-  device: auto  # auto: dùng CUDA nếu có, không thì CPU
+  device: cuda  # Mặc định GPU (cuda), fallback CPU nếu không có GPU
 
 # License Plate OCR (Local Model)
 license_plate:
   model_path: /app/backend/models/number_license_model.pt
-  conf_threshold: 0.35
+  conf_threshold: 0.25  # Giảm xuống để tăng recall (nhận diện nhiều ký tự hơn)
   iou_threshold: 0.6
-  device: auto  # auto: dùng CUDA nếu có, không thì CPU
+  device: cuda  # Mặc định GPU (cuda), fallback CPU nếu không có GPU
 
 # Database
-# Để chạy trên server riêng, đổi host thành IP server MongoDB
-# VD: host: "192.168.1.100" hoặc "mongodb.example.com"
 database:
   mongo_camera:
-    host: mongo  # Đổi thành IP/domain của MongoDB server
+    host: mongo  # Docker service name (nội bộ)
     port: 27017
     database: traffic
     username: ""
     password: ""
     authSource: admin
 
-# External Services (khi deploy distributed)
-# Uncomment và config khi chạy trên nhiều server
+# External Services
+# Khi deploy distributed trên nhiều server, cấu hình URL tại đây
 # services:
-#   frontend_url: "http://192.168.1.101:3000"  # Frontend server
-#   backend_url: "http://192.168.1.102:8000"   # Backend server (YOLO AI)
-#   mongo_url: "mongodb://192.168.1.103:27017" # MongoDB server
+#   frontend_url: "http://<FRONTEND_IP>:3000"
+#   backend_url: "http://<BACKEND_IP>:8000"
+#   mongo_url: "mongodb://<MONGO_IP>:27017"

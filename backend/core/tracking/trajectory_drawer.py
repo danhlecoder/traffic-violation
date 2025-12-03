@@ -25,7 +25,7 @@ class TrajectoryDrawer:
         arrow_length: int = 30,
         show_speed: bool = True,
         show_track_id: bool = True,
-        fade_effect: bool = True,
+        fade_effect: bool = False,  # TẮT fade effect để tránh ghosting
         speed_in_kmh: bool = True,
         pixels_per_meter: float = 20.0
     ):

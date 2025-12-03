@@ -4,7 +4,7 @@ services:
     container_name: traffic_mongo
     restart: unless-stopped
     ports:
-      - "0.0.0.0:27017:27017"
+      - "27017:27017"  # Localhost:27017 -> Container:27017
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin123
@@ -21,7 +21,7 @@ services:
     container_name: traffic_mongo_api
     restart: unless-stopped
     ports:
-      - "0.0.0.0:8002:8002"
+      - "8002:8002"  # Localhost:8002 -> Container:8002
     env_file:
       - ./mongo-service/.env
     depends_on:

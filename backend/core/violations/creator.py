@@ -69,12 +69,11 @@ def create_violation_record(
         bbox = vehicle_det["bbox"]
         confidence = vehicle_det["confidence"]
 
-        # Vẽ thông tin vị trí và thời gian ở góc trái trên (chỉ khi cần)
-        # Tạo copy chỉ khi cần vẽ text để tránh modify frame gốc và tiết kiệm memory
-        frame_with_text = frame
+        # VẼ BBOX ĐỎ + TRAJECTORY cho xe vi phạm
+        frame_with_text = frame.copy()
+
+        # 1. Vẽ thông tin góc trái trên
         if location or camera_name:
-            frame_with_text = frame.copy()
-            # Vị trí (dòng 1)
             text_location = location or camera_name or "Unknown"
             cv2.putText(
                 frame_with_text,
@@ -86,8 +85,6 @@ def create_violation_record(
                 2,
                 cv2.LINE_AA
             )
-
-            # Thời gian (dòng 2) - Giờ Việt Nam (UTC+7)
             current_time = datetime.now(VIETNAM_TZ).strftime("%d-%m-%Y %H:%M:%S")
             cv2.putText(
                 frame_with_text,
@@ -99,6 +96,48 @@ def create_violation_record(
                 2,
                 cv2.LINE_AA
             )
+
+        # 2. VẼ BBOX ĐỎ cho phương tiện vi phạm
+        x1, y1, x2, y2 = map(int, bbox)
+        cv2.rectangle(
+            frame_with_text,
+            (x1, y1),
+            (x2, y2),
+            (0, 0, 255),  # Màu đỏ (BGR)
+            3  # Độ dày 3px
+        )
+
+        # 3. VẼ HƯỚNG DI CHUYỂN (trajectory)
+        if track_id:
+            try:
+                from ..tracking.trajectory_tracker import get_trajectory_tracker
+                tracker = get_trajectory_tracker(camera_id)
+                trajectory = tracker.get_trajectory(track_id)
+
+                if trajectory and len(trajectory.points) >= 2:
+                    # Vẽ trajectory line (đường đi)
+                    points = trajectory.get_points()
+                    for i in range(len(points) - 1):
+                        pt1 = (int(points[i].x), int(points[i].y))
+                        pt2 = (int(points[i + 1].x), int(points[i + 1].y))
+                        cv2.line(frame_with_text, pt1, pt2, (0, 0, 255), 2)  # Đỏ
+
+                    # Vẽ mũi tên hướng (nếu có direction vector)
+                    direction = trajectory.get_direction_vector()
+                    if direction:
+                        dx, dy = direction
+                        # Normalize và scale
+                        length = (dx**2 + dy**2)**0.5
+                        if length > 0:
+                            dx, dy = dx / length, dy / length
+                            # Điểm cuối trajectory
+                            last_pt = points[-1]
+                            start = (int(last_pt.x), int(last_pt.y))
+                            # Mũi tên dài 40px
+                            end = (int(last_pt.x + dx * 40), int(last_pt.y + dy * 40))
+                            cv2.arrowedLine(frame_with_text, start, end, (0, 0, 255), 3, tipLength=0.3)
+            except Exception:
+                pass  # Bỏ qua nếu không vẽ được trajectory
 
         # Encode ảnh toàn cảnh (đã có text nếu có)
         full_frame_b64 = encode_image_base64(frame_with_text, quality=100)
@@ -115,21 +154,15 @@ def create_violation_record(
 
         # BƯỚC 1: Kiểm tra có plate detection từ stream không
         if plate_det:
-            logger.debug(f"Có plate detection từ stream")
             plate_crop = crop_bbox(frame, plate_det["bbox"], padding=5)
             if plate_crop is not None:
                 # OCR biển số
                 plate_text = recognize_plate_text(plate_crop)
-                if plate_text:
-                    logger.debug(f"OCR: {plate_text}")
                 # Encode ảnh gốc
                 plate_crop_b64 = encode_image_base64(plate_crop, quality=95)
-            else:
-                logger.debug("Plate crop failed")
 
         # BƯỚC 2: Nếu không có plate từ stream, TỰ ĐỘNG detect từ vehicle crop
         if plate_crop_b64 is None and vehicle_crop is not None:
-            logger.debug("Tự động detect plate từ vehicle crop...")
             try:
                 from ..detection.yolo import get_yolo_detector
                 detector = get_yolo_detector()
@@ -142,17 +175,18 @@ def create_violation_record(
                     camera = service.get_camera(camera_id)
                     if camera and camera.get("detection_rules") and camera["detection_rules"].get("minConfidence"):
                         min_confidence = float(camera["detection_rules"]["minConfidence"])
-                except Exception as e:
-                    logger.debug(f"Không lấy được detection_rules từ camera {camera_id}: {e}")
+                except Exception:
+                    pass
 
-                # Fallback về settings nếu không có
+                # GIẢM CONFIDENCE cho plate detection (plate thường nhỏ, dễ bị miss)
                 if min_confidence is None:
                     from ...config.config import settings
                     min_confidence = settings.YOLO_CONFIDENCE
 
-                # Detect plate trực tiếp trên vehicle crop
-                logger.debug(f"Đang detect plate trên vehicle crop với conf={min_confidence}")
-                crop_detections = detector.detect(vehicle_crop, conf=min_confidence)
+                # Giảm confidence 0.1 so với vehicle detection để tăng recall
+                plate_conf = max(0.2, min_confidence - 0.1) if min_confidence else 0.3
+
+                crop_detections = detector.detect(vehicle_crop, conf=plate_conf)
 
                 # Tìm license_plate trong detections
                 plate_det_from_crop = None
@@ -162,7 +196,6 @@ def create_violation_record(
                         break
 
                 if plate_det_from_crop:
-                    logger.debug(f"Detect plate từ vehicle crop OK")
                     # Crop plate từ vehicle crop (bbox đã relative to vehicle crop)
                     plate_bbox = plate_det_from_crop["bbox"]
                     px1, py1, px2, py2 = map(int, plate_bbox)
@@ -171,14 +204,17 @@ def create_violation_record(
                     plate_crop = vehicle_crop[py1:py2, px1:px2]
 
                     if plate_crop.size > 0:
-                        # OCR biển số
+                        # OCR biển số với model license_plate (server.yaml line 27-32)
                         plate_text = recognize_plate_text(plate_crop)
+
                         if plate_text:
-                            logger.debug(f"OCR từ vehicle crop: {plate_text}")
+                            logger.info(f"✅ Plate OCR: {plate_text} (track={track_id})")
+
                         # Encode ảnh plate crop
                         plate_crop_b64 = encode_image_base64(plate_crop, quality=95)
+
             except Exception as e:
-                logger.error(f"❌ Lỗi khi detect plate từ vehicle crop: {e}", exc_info=True)
+                logger.error(f"❌ Plate detection error: {e}")
 
         # Tạo record - chỉ thông tin cần thiết
         # Convert datetime sang ISO string để serialize JSON

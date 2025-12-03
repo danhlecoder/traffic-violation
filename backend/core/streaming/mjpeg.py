@@ -27,17 +27,41 @@ from ...utils.violations import normalize_stopline_y
 
 
 def open_capture(src: str) -> Optional[cv2.VideoCapture]:
-    """Mở VideoCapture từ URL/file với timeout"""
+    """Mở VideoCapture từ URL/file với timeout và error handling tốt hơn"""
     try:
-        cap = cv2.VideoCapture(src)
+        # Dùng CAP_FFMPEG backend để xử lý H.264 tốt hơn
+        cap = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
         if not cap.isOpened():
-            return None
+            # Fallback sang default backend
+            logger.warning("FFMPEG backend failed, trying default backend")
+            cap = cv2.VideoCapture(src)
+            if not cap.isOpened():
+                return None
 
-        # Set timeout properties để tránh hang
-        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)  # 5s timeout khi connect
-        cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)  # 5s timeout khi read
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Buffer size = 1 để giảm lag
+        # Timeout settings
+        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)
+        cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000)
 
+        # Buffer size: Tăng lên 3 để xử lý H.264 decode errors
+        # (buffer = 1 gây decode error do không đủ frames để decode)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 5)
+
+        # RTSP-specific settings
+        if 'rtsp' in str(src).lower():
+            try:
+                # Tắt auto settings
+                cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)
+                cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+
+                # H.264 decode settings
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+
+                # Reduce FPS nếu decode không kịp (giảm load)
+                # cap.set(cv2.CAP_PROP_FPS, 15)
+            except Exception as e:
+                logger.debug(f"Could not set RTSP properties: {e}")
+
+        logger.info(f"✓ VideoCapture opened: backend={cap.getBackendName()}")
         return cap
     except Exception as e:
         logger.error(f"Lỗi mở capture: {e}")
@@ -119,7 +143,7 @@ def generate_mjpeg(
             arrow_length=settings.TRAJECTORY_ARROW_LENGTH,
             show_speed=settings.TRAJECTORY_SHOW_SPEED,
             show_track_id=settings.TRAJECTORY_SHOW_TRACK_ID,
-            fade_effect=settings.TRAJECTORY_FADE_EFFECT,
+            fade_effect=False,  # TẮT fade để tránh ghosting
             speed_in_kmh=settings.TRAJECTORY_SPEED_IN_KMH,
             pixels_per_meter=settings.PIXELS_PER_METER
         )
@@ -178,49 +202,56 @@ def generate_mjpeg(
     try:
         last_frame_time = 0.0
         skip_counter = 0
-        skip_frames = 0  # REALTIME: Không skip frames nào
+        # Grab và bỏ 2 frames cũ để skip corrupted H.264 frames
+        skip_frames = 2
         frame_count = 0
-        detection_frame_counter = 0  # Counter for detection skip
-        DETECTION_SKIP_FRAMES = 0  # REALTIME: Detect MỌI frame
-        consecutive_errors = 0  # Đếm lỗi liên tiếp
-        MAX_CONSECUTIVE_ERRORS = 10  # Max 10 lỗi liên tiếp (0.5s) - Reconnect nhanh hơn
+        detection_frame_counter = 0
+        # DETECT MỌI FRAME (theo yêu cầu user - không bỏ frame)
+        DETECTION_SKIP_FRAMES = 0
+        consecutive_errors = 0
+        MAX_CONSECUTIVE_ERRORS = 10
 
         # Reset tracker ID khi không có xe trong một khoảng thời gian
         idle_no_vehicle_frames = 0
         idle_frames_threshold = max(1, int((fps or settings.STREAM_DEFAULT_FPS) * max(0.1, settings.TRACKER_RESET_IDLE_SECONDS)))
 
         while True:
-            # Clear buffer - đọc và bỏ frame cũ để giảm lag
-            for _ in range(skip_frames):
-                cap.grab()
+            # TỐI ƯU: Clear buffer - grab và bỏ frame cũ để catch up real-time
+            # Giảm lag bằng cách bỏ qua frame cũ trong buffer
+            if skip_frames > 0:
+                for _ in range(skip_frames):
+                    cap.grab()
 
             ret, frame = cap.read()
             frame_count += 1
 
             if not ret:
                 consecutive_errors += 1
-                logger.warning(f"Không đọc được frame (frame {frame_count}), lỗi liên tiếp: {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}")
+
+                # Chỉ log mỗi 5 lỗi để giảm spam
+                if consecutive_errors % 5 == 0 or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    logger.warning(f"Không đọc được frame (lỗi liên tiếp: {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
 
                 # Nếu lỗi liên tiếp quá nhiều, thử reconnect
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                    logger.error("Quá nhiều lỗi liên tiếp, thử reconnect...")
+                    logger.error("⚠️ Reconnecting stream...")
                     cap.release()
-                    time.sleep(0.5)  # Giảm từ 1s xuống 0.5s
+                    time.sleep(1.0)
                     cap = open_capture(src)
                     if cap is None:
-                        logger.error("Reconnect thất bại, dừng stream")
+                        logger.error("❌ Reconnect failed")
                         break
-                    logger.info("✓ Reconnect thành công")
+                    logger.info("✅ Reconnect OK")
                     consecutive_errors = 0
                     continue
 
-                time.sleep(0.05)
+                time.sleep(0.1)  # Tăng delay khi lỗi
                 continue
 
             # Reset error counter khi đọc frame thành công
             consecutive_errors = 0
 
-            # REALTIME: Không throttle FPS, xử lý ngay
+            # TỐI ƯU: Xử lý ngay không throttle (để real-time)
             last_frame_time = time.time()
 
             # Validate frame trước khi xử lý (sử dụng hàm utility)
@@ -234,10 +265,11 @@ def generate_mjpeg(
             # Initialize vehicle count
             vehicle_count = 0
 
-            # Chạy YOLO detection nếu được bật (skip frames để giảm API calls)
+            # YOLO detection (skip mỗi N frame để tối ưu hiệu năng)
             detections = []
             if detector is not None and enable_detection:
-                # Only detect every Nth frame to reduce API calls to YOLO service
+                # Detect mỗi (DETECTION_SKIP_FRAMES + 1) frame
+                # ByteTrack sẽ interpolate tracking giữa các detection
                 should_detect = (detection_frame_counter % (DETECTION_SKIP_FRAMES + 1) == 0)
                 detection_frame_counter += 1
 
@@ -276,10 +308,10 @@ def generate_mjpeg(
                         # Scale bbox về kích thước frame gốc
                         scale_bboxes_back(detections, scale_back)
 
-                        # Log detection results mỗi 30 frames để giảm log overhead
-                        if frame_count % 30 == 0:
+                        # Log detection mỗi 120 frames
+                        if frame_count % 120 == 0:
                             vehicle_dets = [d for d in detections if d["class_name"] in VEHICLE_CLASSES]
-                            logger.info(f"📊 Frame {frame_count}: Detected {len(detections)} objects ({len(vehicle_dets)} vehicles) - Enable detection: {enable_detection}")
+                            logger.info(f"Frame {frame_count}: {len(vehicle_dets)} vehicles")
 
                     except Exception as e:
                         logger.error(f"Lỗi khi detect: {e}")
@@ -323,12 +355,9 @@ def generate_mjpeg(
                                 (bbox[0], bbox[1], bbox[2], bbox[3])
                             )
 
-                    # Log tracking info mỗi 30 frames để giảm log overhead
-                    if frame_count % 30 == 0:
-                        logger.info(
-                            f"🎯 Frame {frame_count}: Detected {len(detections)} objects, "
-                            f"{len(vehicles_to_track)} vehicles → {tracked_count} có track_id"
-                        )
+                    # Log tracking mỗi 120 frames
+                    if frame_count % 120 == 0:
+                        logger.info(f"Frame {frame_count}: {tracked_count} tracked")
 
                     vehicle_count = tracked_count
                 else:
@@ -414,17 +443,20 @@ def generate_mjpeg(
                 except Exception as e:
                     logger.error(f"Lỗi khi xử lý vi phạm không đội mũ bảo hiểm: {e}")
 
+            # Copy frame để tránh ghosting (vẽ trên frame mới mỗi lần)
+            frame_display = frame.copy()
+
             # Vẽ detections - CHỈ vẽ detections TRONG ROI
             if detector and detections_to_draw:
-                frame = detector.draw_detections(frame, detections_to_draw)
+                frame_display = detector.draw_detections(frame_display, detections_to_draw)
             update_vehicle_count(src, vehicle_count)
             if frame_count % 100 == 0 and detections:
                 density_info = get_vehicle_density_info(vehicle_count)
 
             # Vẽ trajectory sau khi có track và detection
             if trajectory_tracker and trajectory_drawer:
-                frame = trajectory_drawer.draw_all_trajectories(
-                    frame,
+                frame_display = trajectory_drawer.draw_all_trajectories(
+                    frame_display,
                     trajectory_tracker,
                     active_only=True,
                     active_seconds=settings.TRAJECTORY_ACTIVE_SECONDS,
@@ -437,7 +469,7 @@ def generate_mjpeg(
                 # Vị trí (dòng 1)
                 text_location = location or camera_name or "Unknown"
                 cv2.putText(
-                    frame,
+                    frame_display,
                     text_location,
                     (10, 30),  # Góc trái trên, cách lề 10px, dòng 1
                     cv2.FONT_HERSHEY_SIMPLEX,
@@ -451,7 +483,7 @@ def generate_mjpeg(
                 vietnam_tz = timezone(timedelta(hours=7))
                 current_time = datetime.now(vietnam_tz).strftime("%d-%m-%Y %H:%M:%S")
                 cv2.putText(
-                    frame,
+                    frame_display,
                     current_time,
                     (10, 60),  # Dòng 2, cách dòng 1 khoảng 30px
                     cv2.FONT_HERSHEY_SIMPLEX,
@@ -462,7 +494,7 @@ def generate_mjpeg(
                 )
 
             # Validate frame một lần nữa sau detection
-            if frame is None or frame.size == 0:
+            if frame_display is None or frame_display.size == 0:
                 logger.warning("Frame bị invalid sau detection, bỏ qua")
                 continue
 
@@ -470,7 +502,7 @@ def generate_mjpeg(
             encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), int(jpeg_quality)]
 
             try:
-                ok, buffer = cv2.imencode(".jpg", frame, encode_params)
+                ok, buffer = cv2.imencode(".jpg", frame_display, encode_params)
 
                 if not ok or buffer is None:
                     logger.warning("Không thể encode frame, bỏ qua")

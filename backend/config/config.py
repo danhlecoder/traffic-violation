@@ -75,7 +75,7 @@ class Settings:
         lp_cfg = config.get("license_plate", {})
         self.LP_MODEL_PATH: str = lp_cfg.get("model_path", "/app/backend/models/license_plate.pt")
         self.LP_DEVICE: str = lp_cfg.get("device", "cuda")
-        self.LP_CONF_THRESHOLD: float = lp_cfg.get("conf_threshold", 0.35)
+        self.LP_CONF_THRESHOLD: float = lp_cfg.get("conf_threshold", 0.25)  # Giảm để tăng recall
         self.LP_IOU_THRESHOLD: float = lp_cfg.get("iou_threshold", 0.6)
 
         # Database
@@ -96,7 +96,7 @@ class Settings:
 
         # Stream
         self.STREAM_DEFAULT_FPS: int = self._get_env("STREAM_DEFAULT_FPS", 15, int)
-        self.STREAM_DEFAULT_QUALITY: int = self._get_env("STREAM_DEFAULT_QUALITY", 85, int)
+        self.STREAM_DEFAULT_QUALITY: int = self._get_env("STREAM_DEFAULT_QUALITY", 95, int)  # Tăng quality để giảm ghosting/artifacts
         self.STREAM_RECONNECT_TIMEOUT: int = self._get_env("STREAM_RECONNECT_TIMEOUT", 30, int)
         self.STREAM_SKIP_FRAMES: int = self._get_env("STREAM_SKIP_FRAMES", 0, int)
         self.STREAM_DETECTION_WIDTH: int = self._get_env("STREAM_DETECTION_WIDTH", 0, int)
@@ -143,7 +143,7 @@ class Settings:
 
         # Trajectory Tracking
         self.TRAJECTORY_ENABLED: bool = self._get_env("TRAJECTORY_ENABLED", "true", str).lower() == "true"
-        self.TRAJECTORY_MAX_POINTS: int = self._get_env("TRAJECTORY_MAX_POINTS", 30, int)
+        self.TRAJECTORY_MAX_POINTS: int = self._get_env("TRAJECTORY_MAX_POINTS", 60, int)  # Tăng để trajectory dài hơn
         self.TRAJECTORY_CLEANUP_TIMEOUT: int = self._get_env("TRAJECTORY_CLEANUP_TIMEOUT", 30, int)
         self.TRAJECTORY_LINE_THICKNESS: int = self._get_env("TRAJECTORY_LINE_THICKNESS", 2, int)
         self.TRAJECTORY_POINT_RADIUS: int = self._get_env("TRAJECTORY_POINT_RADIUS", 3, int)
@@ -156,7 +156,7 @@ class Settings:
         self.TRAJECTORY_PIXELS_BETWEEN_LINES: float = self._get_env("TRAJECTORY_PIXELS_BETWEEN_LINES", 160.0, float)
         # Giữ tên cũ để tương thích ngược
         self.TRAJECTORY_PIXELS_PER_METER: float = self.PIXELS_PER_METER
-        self.TRAJECTORY_ACTIVE_SECONDS: float = self._get_env("TRAJECTORY_ACTIVE_SECONDS", 1.0, float)
+        self.TRAJECTORY_ACTIVE_SECONDS: float = self._get_env("TRAJECTORY_ACTIVE_SECONDS", 5.0, float)  # Tăng để giữ trajectory lâu hơn
 
     def _validate_settings(self):
         """Validate các thiết lập quan trọng để tránh lỗi runtime"""

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deploy/Stop tất cả services trên 1 máy (192.168.1.43)
+# Deploy/Stop tất cả services trên localhost
 
 ACTION=${1:-up}
 
@@ -25,7 +25,7 @@ if [ "$ACTION" != "up" ]; then
     exit 1
 fi
 
-echo "🚀 Deploying ALL services trên 192.168.1.43..."
+echo "🚀 Deploying ALL services trên localhost..."
 echo ""
 
 # Stop tất cả services cũ
@@ -67,21 +67,21 @@ docker compose -f docker-compose.frontend.yml up -d --build
 echo ""
 echo "✅ Deployment complete!"
 echo ""
-echo "📍 Services running on 192.168.1.43:"
-echo "   - MongoDB:   http://192.168.1.43:27017"
-echo "   - Mongo API: http://192.168.1.43:8002"
-echo "   - Backend:   http://192.168.1.43:8000 (YOLO tích hợp sẵn)"
-echo "   - N8N:       http://192.168.1.43:8001 👈 Automation & Workflows"
-echo "   - Frontend:  http://192.168.1.43:3000"
+echo "📍 Services running on localhost:"
+echo "   - MongoDB:   http://localhost:27017"
+echo "   - Mongo API: http://localhost:8002"
+echo "   - Backend:   http://localhost:8000 (YOLO tích hợp sẵn)"
+echo "   - N8N:       http://localhost:8001 👈 Automation & Workflows"
+echo "   - Frontend:  http://localhost:3000"
 echo ""
 echo "🧪 Test services:"
-echo "   curl http://192.168.1.43:8002/health"
-echo "   curl http://192.168.1.43:8000/api/cameras"
-echo "   curl http://192.168.1.43:8001/healthz"
+echo "   curl http://localhost:8002/health"
+echo "   curl http://localhost:8000/api/cameras"
+echo "   curl http://localhost:8001/healthz"
 echo ""
 echo "🌐 Open browser:"
-echo "   Frontend: http://192.168.1.43:3000"
-echo "   N8N:      http://192.168.1.43:8001 (user: admin, pass: admin123)"
+echo "   Frontend: http://localhost:3000"
+echo "   N8N:      http://localhost:8001"
 echo ""
 echo "📊 View logs:"
 echo "   docker compose -f docker-compose.mongo.yml logs -f"
