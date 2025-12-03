@@ -82,6 +82,99 @@ def _build_history_entry(violation: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def delete_violation_record(track_id: str) -> bool:
+    """
+    XÓA TOÀN BỘ violation record theo track_id
+    ⚠️ WARNING: Chỉ dùng khi cần xóa hoàn toàn, không dùng để xóa tag riêng lẻ
+
+    Args:
+        track_id: Track ID của phương tiện
+
+    Returns:
+        True nếu xóa thành công, False nếu lỗi
+    """
+    try:
+        if not track_id:
+            logger.error("Không có track_id để xóa")
+            return False
+
+        service = get_mongodb_service()
+
+        # Kiểm tra xem có tồn tại không
+        try:
+            existing = service.get_violation(track_id)
+            if not existing:
+                logger.debug(f"Không tìm thấy violation với track_id={track_id}")
+                return False
+        except Exception:
+            return False
+
+        # Xóa qua MongoDB service
+        result = service.delete_violation(track_id)
+        if result:
+            logger.info(f"✅ Đã xóa violation: track_id={track_id}")
+            return True
+        else:
+            logger.warning(f"⚠️ Không xóa được violation: track_id={track_id}")
+            return False
+
+    except Exception as e:
+        logger.error(f"❌ Lỗi xóa violation track_id={track_id}: {e}")
+        return False
+
+
+def remove_violation_tag(track_id: str, tag_to_remove: str) -> bool:
+    """
+    XÓA 1 TAG cụ thể khỏi violation_tags, GIỮ NGUYÊN các tags khác
+
+    Ví dụ: remove_violation_tag(track_id, "red_light")
+    - violation_tags = ["red_light", "stopline_crossing"]
+    → violation_tags = ["stopline_crossing"]
+
+    Args:
+        track_id: Track ID của phương tiện
+        tag_to_remove: Tag cần xóa (vd: "red_light", "speed_violation")
+
+    Returns:
+        True nếu xóa thành công hoặc violation không tồn tại
+        False nếu có lỗi
+    """
+    try:
+        service = get_mongodb_service()
+
+        # Lấy violation hiện tại
+        existing = service.get_violation(track_id)
+        if not existing:
+            return True  # Không tồn tại → coi như đã xóa
+
+        # Lấy tags hiện tại
+        current_tags = existing.get("violation_tags", [])
+        if tag_to_remove not in current_tags:
+            return True  # Tag không có → không cần xóa
+
+        # Xóa tag
+        new_tags = [t for t in current_tags if t != tag_to_remove]
+
+        # Nếu không còn tag nào hoặc chỉ còn "detected" → xóa toàn bộ record
+        if not new_tags or new_tags == ["detected"]:
+            logger.info(f"🗑️ Không còn tag vi phạm, xóa record: {track_id}")
+            return service.delete_violation(track_id)
+
+        # Update tags mới
+        update_payload = {
+            "violation_tags": new_tags
+        }
+
+        result = service.update_violation(track_id, update_payload)
+        if result:
+            logger.info(f"✅ Đã xóa tag '{tag_to_remove}' khỏi {track_id}, còn lại: {new_tags}")
+        return result is not None
+
+    except Exception as e:
+        logger.error(f"❌ Lỗi xóa tag '{tag_to_remove}' của {track_id}: {e}", exc_info=True)
+        return False
+
+
 def upsert_violation_record(violation: Dict[str, Any]) -> Optional[str]:
     """Cập nhật hoặc tạo mới violation theo track_id, giữ toàn bộ lịch sử vi phạm."""
     try:

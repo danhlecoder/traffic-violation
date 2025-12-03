@@ -23,28 +23,29 @@ class YOLODetector:
 
             self.model = YOLO(model_path)
 
-            # Chọn device tự động: CUDA nếu khả dụng, ngược lại CPU
-            configured = (settings.YOLO_DEVICE or 'auto').lower()
-            use_auto = configured == 'auto' or configured == 'cuda'
-            if use_auto and torch.cuda.is_available():
+            # Chọn device: mặc định GPU (cuda), fallback CPU nếu không có
+            configured = (settings.YOLO_DEVICE or 'cuda').lower()
+
+            # Ưu tiên GPU: nếu config là cuda hoặc auto
+            if configured in ('cuda', 'auto') and torch.cuda.is_available():
                 device = '0'
                 self.device = device
                 self.model.to('cuda')
                 try:
                     torch.backends.cudnn.benchmark = True
-                    # half precision khi có thể để giảm độ trễ
+                    # Half precision để tăng tốc độ
                     self.model.model.half()  # type: ignore[attr-defined]
                 except Exception:
                     pass
-                logger.info(f"✓ YOLO running on GPU: {torch.cuda.get_device_name(0)} (auto)")
+                logger.info(f"✓ YOLO running on GPU: {torch.cuda.get_device_name(0)}")
             else:
                 device = 'cpu'
                 self.device = device
                 self.model.to('cpu')
-                if configured == 'cuda' and not torch.cuda.is_available():
-                    logger.warning("⚠️ CUDA không khả dụng, chuyển sang CPU")
+                if configured == 'cuda':
+                    logger.warning("⚠️ GPU không khả dụng, fallback sang CPU")
                 else:
-                    logger.info("✓ YOLO running on CPU")
+                    logger.info("✓ YOLO running on CPU (cấu hình thủ công)")
 
             # Default thresholds
             self.default_conf = settings.YOLO_CONF_DEFAULT

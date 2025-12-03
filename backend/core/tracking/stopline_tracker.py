@@ -43,10 +43,10 @@ class StoplineCrossingDetector:
         x1, y1, x2, y2 = bbox
         distance = y2 - stopline_y
 
-        # Vùng detection: stopline_y ± detection_range (lineStop là trung tâm)
-        # Ví dụ: stopline_y=480, range=60 → vùng=[420-540] (tổng 120px)
+        # Vùng detection: stopline_y ± detection_range (CẢ 2 PHÍA)
+        # Ví dụ: stopline_y=480, range=60 → vùng=[420-540] (tổng 120px, stopline ở giữa)
         detection_min = stopline_y - self.detection_range
-        detection_max = stopline_y
+        detection_max = stopline_y + self.detection_range  # ← SỬA: Phát hiện CẢ 2 PHÍA
         is_in_range = detection_min <= y2 <= detection_max
 
         # Init track nếu chưa có
@@ -64,12 +64,11 @@ class StoplineCrossingDetector:
         # Dùng hash để check modulo với string track_id
         track_id_for_log = hash(track_id) % 1000
 
-        if track_id_for_log % 5 == 0 or is_in_range:
-            logger.info(
-                f"🔍 Track {track_id}: y2={y2:.1f}px, stopline={stopline_y:.1f}px, "
-                f"distance={distance:+.1f}px, "
-                f"vùng=[{detection_min:.0f}-{detection_max:.0f}] (chỉ phía trên stopline), "
-                f"in_range={is_in_range}, crossed={track_state.get('crossed', False)}"
+        # Giảm log
+        if is_in_range and not track_state.get('crossed', False):
+            logger.debug(
+                f"Track {track_id}: y2={y2:.1f}, stopline={stopline_y:.1f}, "
+                f"range=[{detection_min:.0f}-{detection_max:.0f}]"
             )
 
         # ĐIỀU KIỆN PHÁT HIỆN: Xe trong vùng detection range (y2 >= và <= lineStop trong ±detection_range)
@@ -81,17 +80,8 @@ class StoplineCrossingDetector:
                 return False
 
             track_state["crossed"] = True
-            logger.info(
-                f"✅ [VIOLATION DETECTED] Track {track_id} TRONG VÙNG DETECTION → Ghi nhận ngay! "
-                f"(y2={y2:.1f}px, stopline={stopline_y:.1f}px, distance={distance:+.1f}px, "
-                f"vùng=[{detection_min:.0f}-{detection_max:.0f}])"
-            )
+            logger.info(f"✅ Stopline: {track_id}")
             return True
-        else:
-            logger.debug(
-                f"❌ Track {track_id} NGOÀI vùng detection "
-                f"(y2={y2:.1f}px, vùng=[{detection_min:.0f}-{detection_max:.0f}])"
-            )
 
         return False
 

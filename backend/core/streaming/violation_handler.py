@@ -14,6 +14,7 @@ from ..violations.creator import create_violation_record
 from ..violations.repository import upsert_violation_record
 from ...utils.violations import find_plate_detection_for_vehicle, detect_plate_on_vehicle_crop
 from ...api.clients.mongodb_service import get_mongodb_service
+from ..events.violation_broker import emit_violation_event
 
 
 def process_stopline_violations(
@@ -61,10 +62,9 @@ def process_stopline_violations(
             stopline_y = stopline_y_raw
 
         # Cache các giá trị tính toán để tránh tính lại mỗi detection
+        # Vùng detection: stopline ± range (CẢ 2 PHÍA)
         detection_min = stopline_y - settings.STOPLINE_DETECTION_RANGE
         detection_max = stopline_y + settings.STOPLINE_DETECTION_RANGE
-        frame_width = frame.shape[1]
-        frame_center_x = frame_width / 2
 
         record_count = 0
         camera_min_confidence = None
@@ -80,20 +80,14 @@ def process_stopline_violations(
 
             x1, y1, x2, y2 = bbox
 
-            # Kiểm tra xe có trong vùng detection range không (điều kiện chính)
+            # Kiểm tra xe có trong vùng detection range không (CẢ 2 PHÍA stopline)
+            # Phát hiện CẢ XE ĐI XUỐNG (y2 <= stopline + range) VÀ ĐI LÊN (y2 >= stopline - range)
             is_in_range = detection_min <= y2 <= detection_max
 
             if not is_in_range:
                 continue  # Xe ngoài vùng detection, bỏ qua
 
-            # Xác định phương tiện ở phía bên phải (điều kiện bắt buộc)
-            center_x = (x1 + x2) / 2
-            is_right_side = center_x >= frame_center_x
-
-            if not is_right_side:
-                track_id = det.get("track_id", "?")
-                logger.debug(f"⏭️  Track {track_id}: Xe ở phía bên trái, bỏ qua (center_x={center_x:.1f}, frame_width={frame_width})")
-                continue
+            # ✅ PHÁT HIỆN CẢ 2 CHIỀU - KHÔNG FILTER bên trái/phải
 
             # Lấy track_id - BẮT BUỘC để tránh phát hiện nhiều lần cho cùng 1 phương tiện
             track_id = det.get("track_id")
@@ -101,12 +95,6 @@ def process_stopline_violations(
                 logger.warning(f"⚠️ Detection không có track_id, bỏ qua (vehicle: {det.get('class_name')})")
                 continue  # Bỏ qua nếu không có track_id - đảm bảo mọi vehicle đều có track_id từ vehicle_tracker
 
-            # Log debug khi xe trong vùng detection và ở phía bên phải (chỉ khi cần debug)
-            distance_to_stopline = y2 - stopline_y
-            logger.debug(
-                f"Track {track_id}: y2={y2:.1f}px, stopline={stopline_y:.1f}px, "
-                f"distance={distance_to_stopline:+.1f}px"
-            )
 
             # Gọi check_crossing - sẽ ghi nhận ngay nếu is_in_range = True
             # track_id là string: 5 số ngẫu nhiên + hhmmss (đã được đảm bảo từ vehicle_tracker)

@@ -2,10 +2,10 @@
 # Script test N8N webhook
 
 echo "🧪 Testing N8N Production Webhook..."
-echo "URL: http://192.168.1.36:8001/webhook/violation-confirmed"
+echo "URL: http://localhost:8001/webhook/violation-confirmed"
 echo ""
 
-curl -X POST http://192.168.1.36:8001/webhook/violation-confirmed \
+curl -X POST http://localhost:8001/webhook/violation-confirmed \
   -H "Content-Type: application/json" \
   -d '{
     "track_id": "test_manual_'$(date +%s)'",
@@ -24,6 +24,8 @@ curl -X POST http://192.168.1.36:8001/webhook/violation-confirmed \
 
 echo ""
 echo "✅ Nếu thấy response OK, check Discord channel!"
+
+
 
 
 

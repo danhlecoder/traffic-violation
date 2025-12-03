@@ -65,13 +65,7 @@ class StoplineViolationRecorder:
             if not (detection_min <= y2 <= detection_max):
                 continue
 
-            distance_to_stopline = y2 - stopline_y
-            logger.info(
-                (
-                    f"🚗 Track {track_id}: y2={y2:.1f}px, stopline={stopline_y:.1f}px, "
-                    f"distance={distance_to_stopline:+.1f}px (vùng:{detection_min:.1f}-{detection_max:.1f})"
-                )
-            )
+            # distance_to_stopline = y2 - stopline_y
 
             if not self.detector.check_crossing(track_id=track_id, bbox=bbox, stopline_y=stopline_y):
                 continue

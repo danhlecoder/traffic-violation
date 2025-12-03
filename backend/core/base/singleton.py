@@ -67,3 +67,11 @@ def create_singleton_getter(registry: SingletonRegistry, factory_func):
 
 
 
+
+
+
+
+
+
+
+

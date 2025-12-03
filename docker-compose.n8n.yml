@@ -4,42 +4,30 @@ services:
     container_name: traffic_n8n
     restart: unless-stopped
     ports:
-      - "0.0.0.0:8001:5678"
+      - "8001:5678"  # Localhost:8001 -> Container:5678
     environment:
-      # Cấu hình xác thực cơ bản (TẮT để cho webhook hoạt động)
+      # Xác thực (TẮT để webhook hoạt động)
       - N8N_BASIC_AUTH_ACTIVE=false
-      # - N8N_BASIC_AUTH_USER=admin
-      # - N8N_BASIC_AUTH_PASSWORD=admin123
 
-      # Cấu hình host và port
+      # Cấu hình server
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
 
-      # Cấu hình webhook URL (thay đổi nếu cần)
-      - WEBHOOK_URL=http://192.168.1.43:8001/
-
-      # Cấu hình múi giờ Việt Nam
+      # Múi giờ Việt Nam
       - GENERIC_TIMEZONE=Asia/Ho_Chi_Minh
 
-      # Cấu hình kết nối MongoDB (nếu cần)
-      - DB_TYPE=mongodb
-      - DB_MONGODB_CONNECTION_URL=mongodb://admin:admin123@mongo:27017/n8n?authSource=admin
-
-      # Cấu hình workflow
+      # Workflow retention
       - EXECUTIONS_DATA_PRUNE=true
-      - EXECUTIONS_DATA_MAX_AGE=168
+      - EXECUTIONS_DATA_MAX_AGE=168  # 7 ngày
 
-      # Cấu hình CORS cho webhook (cho phép Frontend gọi)
+      # Webhook settings
       - N8N_PAYLOAD_SIZE_MAX=16
       - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
 
     volumes:
-      # Lưu trữ dữ liệu N8N
       - n8n_data:/home/node/.n8n
-
-      # Mount workflows để lưu vào Git (tùy chọn)
       - ./n8n/workflows:/home/node/.n8n/workflows
 
     networks:

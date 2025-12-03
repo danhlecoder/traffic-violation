@@ -1,0 +1,269 @@
+═══════════════════════════════════════════════════════════════════════════════
+    SƠ ĐỒ LUỒNG NHẬN DẠNG BIỂN SỐ XE - FLOWCHART TRUYỀN THỐNG
+═══════════════════════════════════════════════════════════════════════════════
+
+                                    ╭─────────────────────────╮
+                                    │   START: Video Stream   │
+                                    ╰───────────┬─────────────╯
+                                                │
+                                                ↓
+                                    ┌───────────────────────────┐
+                                    │  Capture Frame từ Video   │
+                                    │   (OpenCV VideoCapture)   │
+                                    ╰───────────┬───────────────╯
+                                                │
+                                                ↓
+                                    ╭───────────────────────────╮
+                                    │  Validate Frame hợp lệ?   │
+                                    │   • Kiểm tra kích thước   │
+                                    │   • Kiểm tra pixel values │
+                                    ╰───────┬───────────┬───────╯
+                                            │           │
+                                        Có  │           │  Không
+                                            ↓           ↓
+                            ┌───────────────────────────┐  ←─────────┐
+                            │ Chuẩn bị Frame            │             │
+                            │ • Resize nếu cần          │             │
+                            │ • Scale về detection size │             │
+                            ╰───────────┬───────────────╯             │
+                                        │                             │
+                                        ↓                             │
+                        ┌───────────────────────────────────────────┐
+                        │      YOLO Detection Model                 │
+                        │   Phát hiện đồng thời:                    │
+                        │   • Vehicles: car, motorcycle, bus, truck │
+                        │   • License Plates: license_plate         │
+                        │   Output: bbox, confidence, class_name    │
+                        ╰───────────┬───────────────────────────────╯
+                                    │
+                                    ↓
+                        ┌───────────────────────────┐
+                        │   Phân tách Objects       │
+                        │   Vehicles ↔ Plates       │
+                        ╰───────┬───────────┬───────╯
+                                │           │
+                    ┌───────────┘           └───────────┐
+                    │                                   │
+                    ↓                                   ↓
+    ┌───────────────────────────────┐   ┌───────────────────────────────┐
+    │   Vehicles                    │   │   License Plates              │
+    │   (bbox, confidence, class)   │   │   (bbox, confidence)          │
+    ╰───────────┬───────────────────╯   ╰───────────┬───────────────────╯
+                │                                   │
+                ↓                                   │
+    ┌───────────────────────────────┐               │
+    │   ByteTrack Object Tracker    │               │
+    │   • IoU Matching              │               │
+    │   • Center Distance           │               │
+    │   • Track qua nhiều frames    │               │
+    ╰───────────┬───────────────────╯               │
+                │                                   │
+                ↓                                   │
+    ┌───────────────────────────────┐               │
+    │   Gán Track ID duy nhất       │               │
+    │   Format: 3 alphanumeric +    │               │
+    │           HHMMSS              │               │
+    │   Ví dụ: "2h6005200"          │               │
+    ╰───────────┬───────────────────╯               │
+                │                                   │
+                ↓                                   ↓
+    ┌───────────────────────────────┐   ╭───────────────────────────╮
+    │   Tracked Vehicles            │   │ Biển số nằm trong vùng    │
+    │   (bbox, track_id, class_name)│   │          xe nào?           │
+    ╰───────────┬───────────────────╯   ╰───────┬───────────┬───────╯
+                │                               │           │
+                │                      Tìm thấy │           │ Không tìm thấy
+                │                               ↓           ↓
+                │              ┌───────────────────────────┐
+                │              │ Match Plate với Vehicle   │
+                │              │    theo IoU overlap       │
+                │              ╰───────────┬───────────────╯
+                │                          │
+                │                          ↓
+                │              ┌───────────────────────────┐
+                │              │  Crop Plate từ Frame gốc  │
+                │              ╰───────────┬───────────────╯
+                │                          │
+                └──────────────────────────┼──────────────────────────┐
+                                           │                          │
+                                           ↓                          ↓
+                          ┌───────────────────────────┐   ┌───────────────────────────┐
+                          │   Plate Crop 1 (Direct)   │   │  FALLBACK: Cắt vùng xe    │
+                          │   từ Frame gốc            │   │  từ Frame gốc             │
+                          ╰───────────┬───────────────╯   ╰───────────┬───────────────╯
+                                      │                               │
+                                      │                               ↓
+                                      │               ┌───────────────────────────┐
+                                      │               │  Chạy YOLO lại trên       │
+                                      │               │  vùng xe đã cắt            │
+                                      │               ╰───────────┬───────────────╯
+                                      │                           │
+                                      │                           ↓
+                                      │               ╭───────────────────────────╮
+                                      │               │ Phát hiện được plate      │
+                                      │               │      trong crop?           │
+                                      │               ╰───────┬───────────┬───────╯
+                                      │                       │           │
+                                      │                   Có  │           │  Không
+                                      │                       ↓           ↓
+                                      │       ┌───────────────────────────┐
+                                      │       │  Crop Plate từ Vehicle    │
+                                      │       │        Crop                │
+                                      │       ╰───────────┬───────────────╯
+                                      │                   │
+                                      └───────────────────┼───────────────────────┐
+                                                          │                       │
+                                                          ↓                       ↓
+                                    ┌───────────────────────────────────────────────────────┐
+                                    │        PREPROCESSING PIPELINE                         │
+                                    │  1. Resize nếu cần (max_edge=1600)                    │
+                                    │  2. Deskew: Perspective Transform                     │
+                                    │  3. CLAHE: Cân bằng histogram                        │
+                                    │  4. Denoise: Bilateral Filter                        │
+                                    │  5. Sharpen: Unsharp Masking                         │
+                                    ╰───────────────────┬───────────────────────────────────╯
+                                                        │
+                                                        ↓
+                                    ┌───────────────────────────────────────────┐
+                                    │   YOLO Character Detection Model          │
+                                    │   Phát hiện từng ký tự trên biển số       │
+                                    │   ALLOWED_CHARS: 0-9, A-Z (không dấu)     │
+                                    │   Không có: I, O, Q, R, W, J              │
+                                    ╰───────────────────┬───────────────────────╯
+                                                        │
+                                                        ↓
+                                    ┌───────────────────────────────────────────┐
+                                    │   Sort Characters theo 2 hàng             │
+                                    │   • Nhóm theo tọa độ Y                    │
+                                    │   • Sort mỗi hàng theo tọa độ X           │
+                                    │   • Dùng sort_boxes_two_rows()            │
+                                    ╰───────────────────┬───────────────────────╯
+                                                        │
+                                                        ↓
+                                    ┌───────────────────────────────────────────┐
+                                    │   Ghép Text: Hàng 1 + "-" + Hàng 2        │
+                                    │   Ví dụ: "30A-12345"                      │
+                                    ╰───────────────────┬───────────────────────╯
+                                                        │
+                                                        ↓
+                                    ┌───────────────────────────────────────────┐
+                                    │           Plate Text OCR Result           │
+                                    │         (Ví dụ: "30A-12345")             │
+                                    ╰───────────────────┬───────────────────────╯
+                                                        │
+                ┌───────────────────────────────────────┼───────────────────────┐
+                │                                       │                       │
+                ↓                                       ↓                       ↓
+    ┌───────────────────────────┐   ┌───────────────────────────┐   ┌───────────────────────────┐
+    │   Tracked Vehicles        │   │   Plate Text OCR          │   │   No Plate (None)        │
+    │   (track_id, bbox, class) │   │   (e.g. "30A-12345")      │   │                          │
+    ╰───────────┬───────────────╯   ╰───────────┬───────────────╯   ╰───────────┬───────────────╯
+                │                               │                               │
+                └───────────────────────────────┼───────────────────────────────┘
+                                                │
+                                                ↓
+                                ┌───────────────────────────────────────────┐
+                                │   Tạo Bản Ghi Vi Phạm                    │
+                                │   • Track ID                             │
+                                │   • Vehicle bbox + crop image            │
+                                │   • Plate text OCR                       │
+                                │   • Plate crop image                     │
+                                │   • Timestamp (ISO format)               │
+                                │   • Camera ID, Camera Name               │
+                                │   • Violation Type                       │
+                                ╰───────────────────┬───────────────────────╯
+                                                    │
+                                                    ↓
+                                ┌───────────────────────────────────────────┐
+                                │   Encode Bằng Chứng Base64                │
+                                │   • overview_img (frame gốc + bbox)      │
+                                │   • vehicle_img (crop xe)                 │
+                                │   • plate_img (crop biển số)             │
+                                │   • license_plate (text)                 │
+                                ╰───────────────────┬───────────────────────╯
+                                                    │
+                                                    ↓
+                                ╭───────────────────────────────╮
+                                │                               │
+                                │     MongoDB Storage           │
+                                │                               │
+                                ╰───────────────┬───────────────╯
+                                                │
+                                                ↓
+                                    ╭───────────────────────────╮
+                                    │         END               │
+                                    ╰───────────────────────────╯
+
+═══════════════════════════════════════════════════════════════════════════════
+                              CHÚ THÍCH KÝ HIỆU
+═══════════════════════════════════════════════════════════════════════════════
+
+╭───╮  ╰───╯   = Start/Stop (Oval) - Điểm bắt đầu/kết thúc
+┌───┐  └───┘   = Process Step (Rectangle) - Bước xử lý
+╭───╮  ╰───╯   = Decision (Diamond) - Điều kiện phân nhánh
+╭───╮          = Disk Storage (Cylinder) - Lưu trữ dữ liệu
+╰───╯
+│               = Flow Line - Luồng xử lý
+↓               = Direction - Hướng xử lý
+─               = Connection Line - Kết nối
+
+═══════════════════════════════════════════════════════════════════════════════
+                              TÓM TẮT LUỒNG
+═══════════════════════════════════════════════════════════════════════════════
+
+1. START: Nhận Video Stream
+   ↓
+2. Capture Frame từ Video
+   ↓
+3. Validate Frame hợp lệ? → Nếu không: quay lại bước 2
+   ↓
+4. Chuẩn bị Frame (resize nếu cần)
+   ↓
+5. YOLO Detection Model → Phát hiện Vehicles + Plates đồng thời
+   ↓
+6. Phân tách Objects:
+   ├─→ Vehicles → ByteTrack → Track ID
+   └─→ Plates → Check Overlap với Vehicles
+                ├─→ Direct: Crop từ frame gốc
+                └─→ Fallback: YOLO trên vehicle crop
+   ↓
+7. Preprocessing Pipeline (5 bước):
+   • Resize (max_edge=1600)
+   • Deskew (Perspective Transform)
+   • CLAHE (Cân bằng histogram)
+   • Denoise (Bilateral Filter)
+   • Sharpen (Unsharp Masking)
+   ↓
+8. YOLO Character Detection Model → Phát hiện ký tự
+   ↓
+9. Sort Characters theo 2 hàng
+   ↓
+10. Ghép Text: Hàng1 + "-" + Hàng2
+   ↓
+11. Tạo Bản Ghi Vi Phạm (Violation Record)
+   ↓
+12. Encode Bằng Chứng Base64
+   ↓
+13. MongoDB Storage
+   ↓
+14. END
+
+═══════════════════════════════════════════════════════════════════════════════
+                              FILES LIÊN QUAN
+═══════════════════════════════════════════════════════════════════════════════
+
+• backend/core/streaming/mjpeg.py          - Video processing loop
+• backend/core/detection/yolo.py           - YOLO detector wrapper
+• backend/core/tracking/vehicle_tracker.py - ByteTrack implementation
+• backend/core/license_plate/detector.py   - OCR model
+• backend/core/license_plate/preprocessing.py - Preprocessing pipeline
+• backend/core/violations/creator.py       - Tạo violation record
+
+═══════════════════════════════════════════════════════════════════════════════
+
+
+
+
+
+
+

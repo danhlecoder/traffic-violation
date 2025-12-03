@@ -6,10 +6,10 @@ services:
     container_name: traffic_backend
     restart: unless-stopped
     ports:
-      - "0.0.0.0:8000:8000"
+      - "8000:8000"  # Localhost:8000 -> Container:8000
     volumes:
       - ./backend:/app/backend
-      - ./backend/models:/app/backend/models:ro
+      - ./backend/models:/app/backend/models:ro  # Read-only models
     environment:
       - PYTHONUNBUFFERED=1
     env_file:

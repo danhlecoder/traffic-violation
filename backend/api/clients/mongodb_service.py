@@ -115,6 +115,11 @@ class MongoDBService(BaseAPIService):
         result = self._get(f"/v1/violations/{track_id}")
         return result.get("violation") if result else None
 
+    def delete_violation(self, track_id: str) -> bool:
+        """Xóa violation theo track_id"""
+        result = self._delete(f"/v1/violations/{track_id}")
+        return result is not None and result.get("success", False)
+
     def _invalidate_camera_cache(self, camera_id: Optional[str] = None) -> None:
         """Xóa cache camera theo ID hoặc toàn bộ"""
         if camera_id:

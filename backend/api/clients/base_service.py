@@ -42,7 +42,8 @@ class BaseAPIService(ABC):
             if response.status_code == 200:
                 return response.json()
             elif response.status_code == 404:
-                logger.warning(f"{self.service_name} - 404 Not Found: {endpoint}")
+                # 404 là bình thường cho get_violation (chưa tồn tại), không cần warning
+                logger.debug(f"{self.service_name} - 404 Not Found: {endpoint}")
                 return None
             else:
                 logger.error(f"{self.service_name} - GET error {response.status_code}: {endpoint}")
@@ -100,7 +101,7 @@ class BaseAPIService(ABC):
                 except:
                     return {"success": True}
             elif response.status_code == 404:
-                logger.warning(f"{self.service_name} - 404 Not Found: {endpoint}")
+                logger.debug(f"{self.service_name} - 404 Not Found: {endpoint}")
                 return None
             elif response.status_code == 422:
                 # Validation error
@@ -127,7 +128,7 @@ class BaseAPIService(ABC):
             if response.status_code == 200:
                 return True
             elif response.status_code == 404:
-                logger.warning(f"{self.service_name} - 404 Not Found: {endpoint}")
+                logger.debug(f"{self.service_name} - 404 Not Found: {endpoint}")
                 return False
             else:
                 logger.error(f"{self.service_name} - DELETE error {response.status_code}")

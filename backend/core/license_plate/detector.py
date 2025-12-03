@@ -29,27 +29,29 @@ class LicensePlateOCR:
 
             self.model = YOLO(model_path)
 
-            # Chọn device tự động (GPU nếu có)
-            configured = (settings.LP_DEVICE or 'auto').lower()
-            use_auto = configured == 'auto' or configured == 'cuda'
-            if use_auto and torch.cuda.is_available():
+            # Chọn device: mặc định GPU (cuda), fallback CPU nếu không có
+            configured = (settings.LP_DEVICE or 'cuda').lower()
+
+            # Ưu tiên GPU: nếu config là cuda hoặc auto
+            if configured in ('cuda', 'auto') and torch.cuda.is_available():
                 device = '0'
                 self.device = device
                 self.model.to('cuda')
                 try:
                     torch.backends.cudnn.benchmark = True
+                    # Half precision để tăng tốc độ
                     self.model.model.half()  # type: ignore[attr-defined]
                 except Exception:
                     pass
-                logger.info("✓ License Plate OCR running on GPU (auto)")
+                logger.info("✓ License Plate OCR running on GPU")
             else:
                 device = 'cpu'
                 self.device = device
                 self.model.to('cpu')
-                if configured == 'cuda' and not torch.cuda.is_available():
-                    logger.warning("⚠️ CUDA không khả dụng cho LP OCR, dùng CPU")
+                if configured == 'cuda':
+                    logger.warning("⚠️ GPU không khả dụng cho LP OCR, fallback sang CPU")
                 else:
-                    logger.info("✓ License Plate OCR running on CPU")
+                    logger.info("✓ License Plate OCR running on CPU (cấu hình thủ công)")
 
             # Build ALLOWED_IDX từ model.names - CHÍNH XÁC THEO CODE MẪU
             names = self.model.names
@@ -82,10 +84,14 @@ class LicensePlateOCR:
             # Import sort_boxes_two_rows
             from .preprocessing import sort_boxes_two_rows
 
-            # Detect - conf=0.35, iou=0.6, classes=ALLOWED_IDX - CHÍNH XÁC THEO CODE MẪU
+            # Detect với confidence thấp hơn để tăng recall (nhận diện nhiều ký tự hơn)
+            # Dùng settings.LP_CONF_THRESHOLD (default 0.25) thay vì hardcode 0.35
+            from ...config.config import settings
+            conf_threshold = settings.LP_CONF_THRESHOLD if hasattr(settings, 'LP_CONF_THRESHOLD') else 0.25
+
             results = self.model.predict(
                 source=plate_img,
-                conf=0.35,
+                conf=conf_threshold,
                 iou=0.6,
                 classes=self.allowed_idx,
                 device=self.device,
@@ -136,11 +142,17 @@ def get_license_plate_ocr() -> LicensePlateOCR:
 
 def recognize_plate_text(plate_img: np.ndarray, conf_threshold: float = None) -> Optional[str]:
     """
-    OCR biển số với enhanced preprocessing - CHÍNH XÁC THEO CODE MẪU
+    OCR biển số với enhanced preprocessing
+
+    Quy trình:
+    1. Preprocess: Deskew + CLAHE + Denoise + Sharpen
+    2. Detect characters bằng YOLO OCR model (server.yaml line 27-32)
+    3. Sort boxes theo 2 hàng (biển số 2 dòng)
+    4. Ghép text: Hàng 1 - Hàng 2
 
     Args:
         plate_img: Plate crop image (BGR)
-        conf_threshold: KHÔNG DÙNG (code mẫu dùng conf=0.35 cố định)
+        conf_threshold: Không dùng (lấy từ settings)
 
     Returns:
         Plate text (e.g. "30A-12345") or None
@@ -149,20 +161,15 @@ def recognize_plate_text(plate_img: np.ndarray, conf_threshold: float = None) ->
         # Import preprocessing
         from .preprocessing import preprocess_enhanced
 
-        # 1-4) Tiền xử lý - CHÍNH XÁC THEO CODE MẪU
+        # 1-4) Tiền xử lý: Deskew + CLAHE + Denoise + Sharpen
         yolo_img, debug = preprocess_enhanced(plate_img, max_edge=1600)
 
-        # 5) Detect - CHÍNH XÁC THEO CODE MẪU
+        # 5) Detect characters bằng License Plate OCR model
         ocr = get_license_plate_ocr()
         plate_text = ocr.recognize(yolo_img)
-
-        if plate_text:
-            logger.info(f"✓ OCR thành công: {plate_text}")
-        else:
-            logger.debug("OCR không nhận dạng được text")
 
         return plate_text
 
     except Exception as e:
-        logger.error(f"Lỗi OCR biển số: {e}")
+        logger.error(f"OCR error: {e}")
         return None
