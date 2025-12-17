@@ -150,7 +150,8 @@ class SpeedViolationRecorder:
             if not violation:
                 continue
 
-            result = upsert_violation_record(violation)
+            # ✅ SỬ DỤNG ASYNC MODE để không block stream
+            result = upsert_violation_record(violation, async_mode=True)
             if result:
                 action = "created" if result != track_id else "updated"
                 log_msg = (

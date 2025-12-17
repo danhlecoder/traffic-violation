@@ -71,7 +71,7 @@ async def send_discord_notification(violation_data: dict):
     Gửi thông báo vi phạm qua Discord webhook (N8N)
     """
     try:
-        # URL production webhook (workflow phải được ACTIVATE trong N8N)
+        # TODO: URL webhook (workflow phải được ACTIVATE trong N8N)
         # Test URL - chỉ dùng khi "Listen for test event" đang bật trong N8N UI
         webhook_url = "http://traffic_n8n:5678/webhook/violation-confirmed"
         # webhook_url = "http://traffic_n8n:5678/webhook/violation-confirmed"

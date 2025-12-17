@@ -10,6 +10,7 @@ from ..config.config import settings
 from .clients.mongodb_service import get_mongodb_service
 from ..utils.logger import app_logger as logger
 from ..core.events.violation_broker import get_violation_event_broker
+from ..core.violations.async_processor import get_async_processor, shutdown_async_processor
 
 
 @asynccontextmanager
@@ -34,9 +35,23 @@ async def lifespan(app: FastAPI):
     get_violation_event_broker().set_loop(loop)
     logger.info("✓ Violation event broker attached to event loop")
 
+    # Khởi động Async Violation Processor (xử lý vi phạm background để tránh lag stream)
+    try:
+        processor = get_async_processor()
+        logger.info("✓ Async violation processor started")
+    except Exception as e:
+        logger.warning(f"⚠ Async processor failed to start: {e}")
+
     logger.info(f"✓ Backend ready at {settings.HOST}:{settings.PORT}")
 
     yield
 
     # TẮT
     logger.info("🛑 Shutting down backend")
+
+    # Shutdown Async Violation Processor (đợi xử lý hết queue trước khi tắt)
+    try:
+        shutdown_async_processor()
+        logger.info("✓ Async violation processor stopped")
+    except Exception as e:
+        logger.warning(f"⚠ Async processor shutdown error: {e}")

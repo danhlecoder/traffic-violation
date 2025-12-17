@@ -5,6 +5,7 @@ Violation Repository - Lưu trữ và truy vấn vi phạm
 from typing import Dict, Any, Optional, List
 from ...api.clients.mongodb_service import get_mongodb_service
 from ...utils.logger import app_logger as logger
+from ...config.config import settings
 
 
 VIOLATION_PRIORITY = {
@@ -175,14 +176,38 @@ def remove_violation_tag(track_id: str, tag_to_remove: str) -> bool:
         return False
 
 
-def upsert_violation_record(violation: Dict[str, Any]) -> Optional[str]:
-    """Cập nhật hoặc tạo mới violation theo track_id, giữ toàn bộ lịch sử vi phạm."""
+def upsert_violation_record(violation: Dict[str, Any], async_mode: bool = True) -> Optional[str]:
+    """
+    Cập nhật hoặc tạo mới violation theo track_id, giữ toàn bộ lịch sử vi phạm.
+
+    Args:
+        violation: Violation record
+        async_mode: True = xử lý async (không block), False = xử lý sync
+
+    Returns:
+        track_id nếu thành công (async mode trả về ngay track_id)
+        None nếu lỗi
+    """
     try:
         track_id = violation.get("track_id")
         if not track_id:
             logger.error("Không có track_id trong violation")
             return None
 
+        # ASYNC MODE: Submit vào queue để xử lý background (KHÔNG BLOCK STREAM)
+        if async_mode and getattr(settings, 'ENABLE_ASYNC_VIOLATION_PROCESSING', True):
+            from .async_processor import get_async_processor
+            processor = get_async_processor()
+            success = processor.submit(violation)
+            if success:
+                # Trả về track_id ngay lập tức (không đợi DB)
+                return track_id
+            else:
+                # Queue full → fallback về sync mode
+                logger.warning(f"⚠️ Async queue full, fallback sync mode: {track_id}")
+                # Tiếp tục xử lý sync ở dưới
+
+        # SYNC MODE: Xử lý ngay (BLOCK STREAM)
         service = get_mongodb_service()
 
         try:
@@ -212,15 +237,31 @@ def upsert_violation_record(violation: Dict[str, Any]) -> Optional[str]:
             update_payload: Dict[str, Any] = {
                 "violation_tags": tags,
                 "vehicle_type": violation.get("vehicle_type") or existing.get("vehicle_type"),
-                "license_plate": violation.get("license_plate") or existing.get("license_plate"),
             }
+
+            # ✅ ƯU TIÊN GIỮ license_plate ĐẦU TIÊN (detection gần camera, rõ hơn)
+            # CHỈ update nếu existing CHƯA CÓ plate
+            if existing.get("license_plate"):
+                update_payload["license_plate"] = existing["license_plate"]  # GIỮ CŨ
+            elif violation.get("license_plate"):
+                update_payload["license_plate"] = violation["license_plate"]  # Dùng mới nếu chưa có
 
             if violation.get("timestamp"):
                 update_payload["timestamp"] = violation["timestamp"]
             if violation.get("speed") is not None:
                 update_payload["speed"] = violation["speed"]
+
+            # ✅ XỬ LÝ IMAGES: GIỮ plate_crop đầu tiên, update overview & vehicle_crop
             if violation.get("images"):
-                update_payload["images"] = violation["images"]
+                new_images = violation["images"].copy()
+                existing_images = existing.get("images") or {}
+
+                # GIỮ plate_crop đầu tiên nếu đã có (detection gần camera, rõ hơn)
+                if existing_images.get("plate_crop"):
+                    new_images["plate_crop"] = existing_images["plate_crop"]
+
+                update_payload["images"] = new_images
+
             if history:
                 update_payload["violation_history"] = history
 

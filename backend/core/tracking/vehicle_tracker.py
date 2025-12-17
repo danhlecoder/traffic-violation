@@ -142,7 +142,7 @@ class ObjectTracker:
         """
         self.frame_count += 1
 
-        # Separate detections by confidence (ByteTrack strategy)
+        # TODO: BƯỚC 1: Chia detections theo confidence  (ByteTrack strategy)
         high_conf_dets = []
         low_conf_dets = []
 
@@ -152,7 +152,7 @@ class ObjectTracker:
             else:
                 low_conf_dets.append(det)
 
-        # Match high confidence detections với active tracks
+        # TODO: B2: Match high confidence detections với active tracks
         matched_tracks, unmatched_tracks, unmatched_dets = self._match(
             self.tracks, high_conf_dets
         )
@@ -164,7 +164,7 @@ class ObjectTracker:
                 det['bbox'], det['class_name'], det['confidence'], self.frame_count
             )
 
-        # Try match unmatched tracks với low confidence detections
+        # TODO: BƯỚC 3: Match low confidence với unmatched tracks
         unmatched_low_det_indices = set(range(len(low_conf_dets)))
         if len(low_conf_dets) > 0 and len(unmatched_tracks) > 0:
             remaining_tracks = [self.tracks[i] for i in unmatched_tracks]
@@ -189,11 +189,11 @@ class ObjectTracker:
             # Remove matched tracks từ unmatched_tracks
             unmatched_tracks = [idx for i, idx in enumerate(unmatched_tracks) if i not in matched_indices]
 
-        # Mark unmatched tracks as missed
+        # TODO: B4: Đánh dấu track bị miss
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed()
 
-        # Create new tracks từ unmatched high-confidence detections
+        # TODO: B5 Create new tracks
         for det_idx in unmatched_dets:
             det = high_conf_dets[det_idx]
             track_id = self._generate_track_id()

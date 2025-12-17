@@ -95,7 +95,9 @@ class Settings:
         self.YOLO_MAX_DETECTIONS: int = self._get_env("YOLO_MAX_DETECTIONS", 100, int)
 
         # Stream
-        self.STREAM_DEFAULT_FPS: int = self._get_env("STREAM_DEFAULT_FPS", 15, int)
+        # ✅ GIẢM FPS từ 15 → 10 để stream chạy CHẬM HƠN, phát hiện CHÍNH XÁC HƠN
+        # FPS thấp hơn = Nhiều thời gian xử lý hơn cho mỗi frame = Detection tốt hơn
+        self.STREAM_DEFAULT_FPS: int = self._get_env("STREAM_DEFAULT_FPS", 10, int)
         self.STREAM_DEFAULT_QUALITY: int = self._get_env("STREAM_DEFAULT_QUALITY", 95, int)  # Tăng quality để giảm ghosting/artifacts
         self.STREAM_RECONNECT_TIMEOUT: int = self._get_env("STREAM_RECONNECT_TIMEOUT", 30, int)
         self.STREAM_SKIP_FRAMES: int = self._get_env("STREAM_SKIP_FRAMES", 0, int)
@@ -117,6 +119,9 @@ class Settings:
         # Stopline Crossing Detection
         self.STOPLINE_DETECTION_RANGE: int = self._get_env("STOPLINE_DETECTION_RANGE", 60, int)
         self.STOPLINE_CROSSING_TIMEOUT: int = self._get_env("STOPLINE_CROSSING_TIMEOUT", 30, int)
+
+        # Async Violation Processing (để tránh lag stream khi lưu DB)
+        self.ENABLE_ASYNC_VIOLATION_PROCESSING: bool = self._get_env("ENABLE_ASYNC_VIOLATION_PROCESSING", "true", str).lower() == "true"
 
         # Vision - Stop Line Detection
         self.VISION_CANNY_LOW: int = self._get_env("VISION_CANNY_LOW", 50, int)
@@ -143,7 +148,8 @@ class Settings:
 
         # Trajectory Tracking
         self.TRAJECTORY_ENABLED: bool = self._get_env("TRAJECTORY_ENABLED", "true", str).lower() == "true"
-        self.TRAJECTORY_MAX_POINTS: int = self._get_env("TRAJECTORY_MAX_POINTS", 60, int)  # Tăng để trajectory dài hơn
+        # ✅ Tăng từ 60 lên 90 để capture xe nhanh tốt hơn (nhiều điểm hơn trong thời gian ngắn)
+        self.TRAJECTORY_MAX_POINTS: int = self._get_env("TRAJECTORY_MAX_POINTS", 90, int)
         self.TRAJECTORY_CLEANUP_TIMEOUT: int = self._get_env("TRAJECTORY_CLEANUP_TIMEOUT", 30, int)
         self.TRAJECTORY_LINE_THICKNESS: int = self._get_env("TRAJECTORY_LINE_THICKNESS", 2, int)
         self.TRAJECTORY_POINT_RADIUS: int = self._get_env("TRAJECTORY_POINT_RADIUS", 3, int)
@@ -156,7 +162,8 @@ class Settings:
         self.TRAJECTORY_PIXELS_BETWEEN_LINES: float = self._get_env("TRAJECTORY_PIXELS_BETWEEN_LINES", 160.0, float)
         # Giữ tên cũ để tương thích ngược
         self.TRAJECTORY_PIXELS_PER_METER: float = self.PIXELS_PER_METER
-        self.TRAJECTORY_ACTIVE_SECONDS: float = self._get_env("TRAJECTORY_ACTIVE_SECONDS", 5.0, float)  # Tăng để giữ trajectory lâu hơn
+        # ✅ Giảm từ 5.0 xuống 3.0 giây để trajectory biến mất nhanh hơn (tránh ghost)
+        self.TRAJECTORY_ACTIVE_SECONDS: float = self._get_env("TRAJECTORY_ACTIVE_SECONDS", 3.0, float)
 
     def _validate_settings(self):
         """Validate các thiết lập quan trọng để tránh lỗi runtime"""

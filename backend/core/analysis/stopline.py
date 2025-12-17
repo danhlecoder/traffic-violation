@@ -21,13 +21,14 @@ Point = Tuple[float, float]
 Segment = Tuple[Point, Point]
 
 
+# TODO: Phát hiện vạch dừng
 def detect_stop_line_points(frame_bgr: np.ndarray) -> Optional[Segment]:
     """
     Phát hiện vạch dừng sử dụng Canny + HoughLinesP
-    
+
     Args:
         frame_bgr: Frame ảnh BGR
-    
+
     Returns:
         Tuple 2 điểm (x1,y1), (x2,y2) đã kéo dài tới biên, hoặc None
     """
@@ -136,7 +137,7 @@ def _create_default_stopline() -> Segment:
 def detect_stop_line_with_fallback(frame_bgr: np.ndarray) -> Optional[Segment]:
     """
     Phát hiện vạch dừng với fallback:
-    
+
     1. LUÔN thử HoughLinesP (Canny edge detection) trước
     2. Nếu THÀNH CÔNG → trả về kết quả
     3. Nếu THẤT BẠI → fallback về line mặc định 2/3 chiều cao
@@ -155,7 +156,7 @@ def detect_stop_line_with_fallback(frame_bgr: np.ndarray) -> Optional[Segment]:
         # Bước 1: LUÔN thử HoughLinesP trước
         logger.info("🔍 Thử phát hiện stopline bằng HoughLinesP (Canny + edge detection)...")
         result = detect_stop_line_normalized(frame_bgr)
-        
+
         if result is not None:
             logger.info("✓ Detect stopline thành công bằng HoughLinesP")
             return result

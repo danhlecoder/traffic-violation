@@ -199,11 +199,14 @@ def generate_mjpeg(
         yield boundary + b"\r\nContent-Type: image/jpeg\r\n\r\n" + b"" + b"\r\n"
         return
 
+    # Khởi tạo biến để tracking
     try:
         last_frame_time = 0.0
+        last_yield_time = 0.0  # ✅ Track thời gian yield cuối cùng để throttle FPS
         skip_counter = 0
-        # Grab và bỏ 2 frames cũ để skip corrupted H.264 frames
-        skip_frames = 2
+        # ✅ GIẢM skip_frames từ 2 → 0 để XỬ LÝ ĐẦY ĐỦ HƠN (không bỏ frames)
+        # Stream sẽ chạy CHẬM HƠN nhưng phát hiện CHÍNH XÁC HƠN
+        skip_frames = 0
         frame_count = 0
         detection_frame_counter = 0
         # DETECT MỌI FRAME (theo yêu cầu user - không bỏ frame)
@@ -386,9 +389,10 @@ def generate_mjpeg(
                         pass
                     idle_no_vehicle_frames = 0
 
-            # Chủ động loại bỏ trajectory đã hết hạn để tránh hiển thị "vệt ma"
+            # ✅ Chủ động loại bỏ trajectory đã hết hạn để tránh hiển thị "vệt ma"
+            # Prune ngay với active_seconds (không giữ thêm 2x) để tránh ghost trajectories
             if trajectory_tracker:
-                prune_window = max(settings.TRAJECTORY_ACTIVE_SECONDS * 2.0, 1.0)
+                prune_window = max(settings.TRAJECTORY_ACTIVE_SECONDS, 1.0)  # Giảm từ 2x xuống 1x
                 trajectory_tracker.prune_inactive(prune_window)
 
             # Không filter ROI - detect tất cả xe
@@ -453,13 +457,14 @@ def generate_mjpeg(
             if frame_count % 100 == 0 and detections:
                 density_info = get_vehicle_density_info(vehicle_count)
 
-            # Vẽ trajectory sau khi có track và detection
+            # ✅ Vẽ trajectory sau khi có track và detection
+            # CHỈ VẼ trajectories có update gần đây (active) để tránh ghost
             if trajectory_tracker and trajectory_drawer:
                 frame_display = trajectory_drawer.draw_all_trajectories(
                     frame_display,
                     trajectory_tracker,
-                    active_only=True,
-                    active_seconds=settings.TRAJECTORY_ACTIVE_SECONDS,
+                    active_only=True,  # CHỈ vẽ active trajectories
+                    active_seconds=settings.TRAJECTORY_ACTIVE_SECONDS,  # 5 giây
                     stopline_y=stopline_y_pixels,
                     pixels_per_meter=settings.PIXELS_PER_METER,
                 )
@@ -513,15 +518,25 @@ def generate_mjpeg(
 
             jpg_bytes: bytes = buffer.tobytes()
 
-            # Yield multipart chunk
-            yield (
-                boundary
-                + b"\r\nContent-Type: image/jpeg"
-                + b"\r\nContent-Length: " + str(len(jpg_bytes)).encode()
-                + b"\r\n\r\n"
-                + jpg_bytes
-                + b"\r\n"
-            )
+            # ✅ FPS THROTTLE: Chỉ YIELD frame khi đủ thời gian từ lần yield trước
+            # - Detection đã xử lý NGAY → timestamp CHÍNH XÁC ✅
+            # - Chỉ throttle YIELD để điều khiển tốc độ hiển thị (không ảnh hưởng tốc độ tính toán)
+            # - Ví dụ: Camera 30 FPS, yield 10 FPS → Xử lý 30 frame/s nhưng chỉ hiển thị 10 frame/s
+            current_time = time.time()
+
+            # Lần đầu tiên hoặc đã đủ thời gian
+            if last_yield_time == 0 or (current_time - last_yield_time) >= delay:
+                yield (
+                    boundary
+                    + b"\r\nContent-Type: image/jpeg"
+                    + b"\r\nContent-Length: " + str(len(jpg_bytes)).encode()
+                    + b"\r\n\r\n"
+                    + jpg_bytes
+                    + b"\r\n"
+                )
+                last_yield_time = current_time
+            # Nếu chưa đủ thời gian: Không yield, tiếp tục loop xử lý frame tiếp theo
+            # (Frame này vẫn được detect → timestamp chính xác, chỉ không hiển thị)
 
     except GeneratorExit:
         pass

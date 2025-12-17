@@ -62,7 +62,7 @@ def normalize_stopline_y(stopline: Dict[str, Any], frame_height: int) -> Optiona
         return stopline_y_raw * frame_height
     return stopline_y_raw
 
-
+# TODO: Tìm biển số trong frame chính
 def find_plate_detection_for_vehicle(
     vehicle_det: Dict[str, Any],
     detections: List[Dict[str, Any]]
@@ -83,6 +83,7 @@ def find_plate_detection_for_vehicle(
     return None
 
 
+# TODO: Tiềm biển số Detect trên vehicle crop
 def detect_plate_on_vehicle_crop(
     detector,
     frame: np.ndarray,

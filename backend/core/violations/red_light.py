@@ -46,6 +46,7 @@ class RedLightViolationRecorder:
         # Lưu track_id đã vi phạm để detect rẽ phải sau
         self._flagged_tracks: Dict[str, bool] = {}
 
+    # TODO: Kiểm tra có đang đèn đỏ hay không.
     def _has_red_light(self, detections: List[Dict[str, Any]]) -> bool:
         """Kiểm tra có đèn đỏ trong frame không"""
         for det in detections:
@@ -53,20 +54,33 @@ class RedLightViolationRecorder:
                 return True
         return False
 
-    def _is_moving_down(self, track_id: str) -> bool:
+
+    def _is_moving_down(self, track_id: str) -> Optional[bool]:
         """
         Kiểm tra xe có đi xuống (y giảm dần) không
-        Returns: True nếu dy < 0 (đi xuống về phía stopline)
+
+        Returns:
+            True nếu dy < 0 (đi xuống về phía stopline)
+            False nếu dy > 0 (đi lên ra xa stopline)
+            None nếu không đủ data (không nên phát hiện vi phạm)
         """
         trajectory = self.tracker.get_trajectory(track_id)
-        if not trajectory or len(trajectory.points) < 2:
-            return True  # Không đủ data → coi như đi thẳng (default)
+
+        # ✅ FIX: Cần tối thiểu 3 điểm để xác định hướng chính xác
+        # Xe chạy nhanh chỉ có 1-2 điểm → KHÔNG ĐỦ DATA → return None
+        if not trajectory or len(trajectory.points) < 3:
+            return None  # ✅ Không đủ data → KHÔNG phát hiện vi phạm
 
         direction = trajectory.get_direction_vector()
         if direction is None:
-            return True
+            return None  # ✅ Không có direction → KHÔNG phát hiện vi phạm
 
         dx, dy = direction
+
+        # ✅ Kiểm tra dy có ý nghĩa không (> 5 pixels để tránh nhiễu)
+        if abs(dy) < 5.0:
+            return None  # Di chuyển quá ít, không rõ hướng
+
         # dy < 0 = đi xuống (về phía stopline ở dưới)
         # dy > 0 = đi lên (ra xa stopline)
         return dy < 0
@@ -153,7 +167,17 @@ class RedLightViolationRecorder:
 
             # ✅ ĐIỀU KIỆN MỚI 1: Kiểm tra hướng di chuyển (phải đi XUỐNG)
             is_moving_down = self._is_moving_down(track_id)
+
+            # ✅ FIX: None = không đủ data → BỎ QUA (không phát hiện vi phạm)
+            # False = đi lên (dy > 0) → BỎ QUA
+            # True = đi xuống (dy < 0) → PHÁT HIỆN VI PHẠM
+            if is_moving_down is None:
+                # Không đủ trajectory data (xe quá nhanh hoặc mới vào frame)
+                # → KHÔNG phát hiện vi phạm để tránh false positive
+                continue
+
             if not is_moving_down:
+                # Xe đi LÊN (ra xa stopline, dy > 0) → KHÔNG vi phạm
                 continue
 
             # ✅ ĐIỀU KIỆN MỚI 2: Kiểm tra RẼ PHẢI (nếu rẽ phải → KHÔNG vi phạm đèn đỏ)
@@ -186,6 +210,10 @@ class RedLightViolationRecorder:
                         pixels_per_meter=pixels_per_meter,
                     )
 
+            # ✅ DEBOUNCING: Chỉ lưu 1 lần, không spam mỗi frame
+            if self._flagged_tracks.get(track_id, False):
+                continue  # Đã lưu rồi, bỏ qua
+
             violation = create_violation_record(
                 frame=frame.copy(),
                 vehicle_det=det,
@@ -200,7 +228,8 @@ class RedLightViolationRecorder:
             if not violation:
                 continue
 
-            result = upsert_violation_record(violation)
+            # ✅ SỬ DỤNG ASYNC MODE để không block stream
+            result = upsert_violation_record(violation, async_mode=True)
             if result:
                 action = "created" if result != track_id else "updated"
                 logger.info(f"🚦 Red light: {track_id}")

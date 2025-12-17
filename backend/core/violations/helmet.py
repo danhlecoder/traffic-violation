@@ -34,6 +34,8 @@ class NoHelmetViolationRecorder:
         self.camera_id = camera_id
         self.camera_name = camera_name
         self.location = location
+        # Debouncing: Lưu track_id đã vi phạm để tránh spam
+        self._flagged_tracks: Dict[str, bool] = {}
 
     @staticmethod
     def _is_no_helmet_inside_vehicle(
@@ -49,9 +51,10 @@ class NoHelmetViolationRecorder:
         vx1, vy1, vx2, vy2 = vbbox
         hx1, hy1, hx2, hy2 = hbbox
 
-        # Sử dụng tâm bbox để tránh vấn đề do scale
+        # Sử dụng tâm bbox để tránh vấn đề do scale Tính tâm bbox của no_helmet
         hcx = (hx1 + hx2) / 2
         hcy = (hy1 + hy2) / 2
+        #  Kiểm tra tâm có nằm trong bbox xe không
         return vx1 <= hcx <= vx2 and vy1 <= hcy <= vy2
 
     def _find_no_helmet_detection(
@@ -79,6 +82,7 @@ class NoHelmetViolationRecorder:
         if not detections:
             return
 
+        # TODO: Chỉ kiểm tra xe máy
         for vehicle_det in detections:
             if vehicle_det.get("class_name") != "motorcycle":
                 continue
@@ -87,8 +91,13 @@ class NoHelmetViolationRecorder:
             if not track_id:
                 continue
 
+            # TODO: Tìm detection no_helmet trong bbox xe máy
             if not self._find_no_helmet_detection(vehicle_det, detections):
                 continue
+
+            # ✅ DEBOUNCING: Chỉ lưu 1 lần, không spam mỗi frame
+            if self._flagged_tracks.get(track_id, False):
+                continue  # Đã lưu rồi, bỏ qua
 
             plate_det = find_plate_detection_for_vehicle(vehicle_det, detections)
             if plate_det is None:
@@ -112,13 +121,17 @@ class NoHelmetViolationRecorder:
             if not violation:
                 continue
 
-            result = upsert_violation_record(violation)
+            # ✅ SỬ DỤNG ASYNC MODE để không block stream
+            result = upsert_violation_record(violation, async_mode=True)
             if result:
                 action = "created" if result != track_id else "updated"
                 logger.info(
                     f"🪖 [Helmet] {'Tạo' if action == 'created' else 'Cập nhật'} vi phạm không đội mũ:"
                     f" track_id={track_id}"
                 )
+                # Đánh dấu đã ghi nhận
+                self._flagged_tracks[track_id] = True
+
                 event_payload = {
                     "action": action,
                     "type": "no_helmet",

@@ -30,7 +30,6 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const [acting, setActing] = useState<'confirm' | 'skip' | null>(null)
   const [finalStatus, setFinalStatus] = useState<string | null>(null)
-  const [videoOpen, setVideoOpen] = useState(false)
 
   // State cho các field có thể chỉnh sửa
   const [editableTypes, setEditableTypes] = useState<ViolationType[]>([])
@@ -73,7 +72,6 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
   }
   const status = finalStatus ?? data?.status ?? 'Mới'
   const isPending = status === 'Mới'
-  const videoUrl: string | undefined = (data as any)?.videoUrl || (data as any)?.video
 
   const handleConfirm = async () => {
     if (!isPending || readOnly || acting || !data?.trackId) return
@@ -172,7 +170,6 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
       {data && (
         <div className="viol-modal">
           <div className="viol-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {violationLabels.length
@@ -189,10 +186,6 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
                 {data.vehicleType && <Tag>{data.vehicleType}</Tag>}
                 <Tag color={STATUS_TAG_COLOR[status as ViolationStatus]}>{status === 'Mới' ? 'Chờ duyệt' : status}</Tag>
               </div>
-              <div>
-                <Button size="small" onClick={() => { if (videoUrl) { setVideoOpen(true) } else { toast('Chưa có video minh chứng', { icon: 'ℹ️' }) } }}>Xem video</Button>
-              </div>
-            </div>
           </div>
 
           <Row gutter={16}>
@@ -380,11 +373,6 @@ export default function ViolationDetailModal({ open, onClose, data, onConfirm, o
               <div className="preview-blank" onDoubleClick={() => setPreviewOpen(false)} />
             )}
           </Modal>
-          {videoUrl && (
-            <Modal open={videoOpen} onCancel={() => setVideoOpen(false)} footer={null} width={900} title="Video minh chứng">
-              <video src={videoUrl} controls style={{ width: '100%', borderRadius: 8 }} />
-            </Modal>
-          )}
         </div>
       )}
     </Modal>

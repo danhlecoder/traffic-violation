@@ -163,7 +163,8 @@ def process_stopline_violations(
                 )
 
                 if violation:
-                    result = upsert_violation_record(violation)
+                    # ✅ SỬ DỤNG ASYNC MODE để không block stream
+                    result = upsert_violation_record(violation, async_mode=True)
                     if result:
                         action = "created" if result != track_id else "updated"
                         event_payload = {

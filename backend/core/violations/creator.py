@@ -139,14 +139,15 @@ def create_violation_record(
             except Exception:
                 pass  # Bỏ qua nếu không vẽ được trajectory
 
-        # Encode ảnh toàn cảnh (đã có text nếu có)
-        full_frame_b64 = encode_image_base64(frame_with_text, quality=100)
+        # Encode ảnh toàn cảnh với quality thấp hơn để giảm lag (80 thay vì 100)
+        # Quality 80 vẫn đủ rõ cho mục đích giám sát, nhưng giảm 50-60% kích thước file
+        full_frame_b64 = encode_image_base64(frame_with_text, quality=80)
         if not full_frame_b64:
             return None
 
-        # Crop ảnh xe
+        # Crop ảnh xe với quality 85 (giảm từ 95)
         vehicle_crop = crop_bbox(frame, bbox, padding=10)
-        vehicle_crop_b64 = encode_image_base64(vehicle_crop, quality=95) if vehicle_crop is not None else None
+        vehicle_crop_b64 = encode_image_base64(vehicle_crop, quality=85) if vehicle_crop is not None else None
 
         # Crop ảnh biển số và OCR
         plate_crop_b64 = None
@@ -158,8 +159,8 @@ def create_violation_record(
             if plate_crop is not None:
                 # OCR biển số
                 plate_text = recognize_plate_text(plate_crop)
-                # Encode ảnh gốc
-                plate_crop_b64 = encode_image_base64(plate_crop, quality=95)
+                # Encode ảnh gốc với quality 85 để giảm lag
+                plate_crop_b64 = encode_image_base64(plate_crop, quality=85)
 
         # BƯỚC 2: Nếu không có plate từ stream, TỰ ĐỘNG detect từ vehicle crop
         if plate_crop_b64 is None and vehicle_crop is not None:
@@ -210,8 +211,8 @@ def create_violation_record(
                         if plate_text:
                             logger.info(f"✅ Plate OCR: {plate_text} (track={track_id})")
 
-                        # Encode ảnh plate crop
-                        plate_crop_b64 = encode_image_base64(plate_crop, quality=95)
+                        # Encode ảnh plate crop với quality 85
+                        plate_crop_b64 = encode_image_base64(plate_crop, quality=85)
 
             except Exception as e:
                 logger.error(f"❌ Plate detection error: {e}")

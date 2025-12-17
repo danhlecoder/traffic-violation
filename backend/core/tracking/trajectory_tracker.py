@@ -77,7 +77,7 @@ class VehicleTrajectory:
 
         return (dx, dy)
 
-
+    # thời điểm xe cắt qua 2 vạch
     def _crossing_time(self, target_y: float) -> Optional[datetime]:
         pts = self.points
         for i in range(len(pts) - 1):
@@ -95,6 +95,7 @@ class VehicleTrajectory:
                 return p1.timestamp + (dt * ratio)
         return None
 
+    # TODO: Tính đốc độ km/h
     def get_speed_kmh_between_lines(
         self,
         line_a_y: float,
@@ -125,6 +126,7 @@ class VehicleTrajectory:
             return 0.0
         return speed_kmh
 
+    # TODO: Tạo lineB
     def get_speed_kmh_through_stopline_gate(
         self,
         stopline_y: float,
